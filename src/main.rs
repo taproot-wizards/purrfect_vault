@@ -4,7 +4,7 @@ use bitcoin::absolute::LockTime;
 use bitcoin::consensus::Encodable;
 use bitcoin::key::{UntweakedKeypair};
 use bitcoin::Network::Regtest;
-use bitcoin::opcodes::all::{OP_CAT, OP_CHECKSIG, OP_EQUAL, OP_SHA256};
+use bitcoin::opcodes::all::{OP_CAT, OP_CHECKSIG, OP_EQUAL, OP_SHA256, OP_SWAP};
 
 use bitcoin::secp256k1::{Secp256k1, ThirtyTwoByteHash};
 use bitcoin::sighash::{Annex, Error, Prevouts, SighashCache};
@@ -15,6 +15,7 @@ use secp256kfun::G;
 use secp256kfun::marker::Public;
 use anyhow::Result;
 use bitcoin::hashes::{Hash, HashEngine, sha256};
+use bitcoin::hex::{Case, DisplayHex};
 use lazy_static::lazy_static;
 
 lazy_static!(
@@ -43,7 +44,7 @@ fn main() {
 
     let mut txin = TxIn {
         previous_output: OutPoint {
-            txid: "7acaf065eea092ec4fd88309570f2dc462711db952b1d14a57f5747f0e61c2a9".parse().expect("txid should be valid"),
+            txid: "b3d7a11706d0d14daa2438155eae77cd67c1ce76ec87faa4ed5324e582921a24".parse().expect("txid should be valid"),
             vout: 0,
         },
         script_sig: Default::default(),
@@ -51,15 +52,11 @@ fn main() {
         witness: Default::default(),
     };
 
-    // txin.witness.push("hello".as_bytes().to_vec());
-    // txin.witness.push("world".as_bytes().to_vec());
-    txin.witness.push(script.clone().to_bytes());
-    txin.witness.push(&taproot_spend_info.control_block(&(script.clone(), LeafVersion::TapScript)).expect("control block should work").serialize());
-
 
     let amount = 99_900_000;
     let mut locktime = 0;
     let mut spend_tx;
+    let mut final_signature = [0u8; 64];
 
     loop {
         spend_tx = Transaction {
@@ -71,7 +68,7 @@ fn main() {
             output: vec![
                 TxOut {
                     value: Amount::from_sat(amount),
-                    script_pubkey: Address::from_str("bcrt1pjjnkdu03tdrc6zejsyljxn58wh5q4qsrmahvl20vryz29p39ka8q39wpwc").expect("address should be valid").assume_checked().script_pubkey(),
+                    script_pubkey: Address::from_str("bcrt1pgrtk9utf7rrt6v9t8cupeyggdtavhdangdcruducjka5zs4r8lsqqw3yxn").expect("address should be valid").assume_checked().script_pubkey(),
                 }
             ],
         };
@@ -88,12 +85,13 @@ fn main() {
         let schnorr = schnorr_fun::test_instance!();
         let R = G.into_point_with_even_y().0;
         let P = G.into_point_with_even_y().0;
+        assert_eq!(R, P);
         let sighash_bytes = sighash.clone().into_32();
         let message: Message<Public> = Message::raw(&sighash_bytes);
         let challenge = schnorr.challenge(&R, &P, message);
         let my_challenge = compute_challenge(&my_computed_sighash);
         assert_eq!(challenge.to_bytes(), my_challenge);
-        println!("challenge looks good!");
+        //println!("challenge looks good!");
 
         let signature = Signature {
             s: challenge.into(),
@@ -101,18 +99,32 @@ fn main() {
         };
         let my_signature = make_signature(&my_challenge);
         assert_eq!(signature.to_bytes(), my_signature);
-        println!("signature looks good!");
+        //println!("signature looks good!");
         // println!("challenge: {}", challenge.to_string());
         if challenge.to_bytes()[31] == 0x01 {
             println!("Found a challenge with a 1 at the end!");
             println!("locktime is {}", locktime);
             println!("Here's the challenge: {}", challenge.to_string());
             println!("Here's the signature: {}", signature.to_string());
+            println!("Here's G_X: {}", G_X.to_hex_string(Case::Lower));
+            final_signature = signature.to_bytes();
             break;
         }
         locktime += 1;
     }
 
+
+    let mut maliated_signature = [0u8; 63];
+    maliated_signature.copy_from_slice(&final_signature[0..63]);
+
+    //txin.witness.push(final_signature.to_vec());
+    txin.witness.push(G_X.as_slice());
+    txin.witness.push(maliated_signature.to_vec());
+
+    println!("length of G_X: {}", G_X.as_slice().len());
+    txin.witness.push(script.clone().to_bytes());
+    txin.witness.push(&taproot_spend_info.control_block(&(script.clone(), LeafVersion::TapScript)).expect("control block should work").serialize());
+    spend_tx.input.first_mut().unwrap().witness = txin.witness.clone();
 
     let mut serialized_tx = Vec::new();
     spend_tx.consensus_encode(&mut serialized_tx).unwrap();
@@ -135,7 +147,11 @@ fn hello_world_script() -> ScriptBuf {
 
 fn checksig_script() -> ScriptBuf {
     let mut builder = Script::builder();
-    builder = builder.push_opcode(OP_CHECKSIG);
+    builder = builder
+        .push_int(0x02)
+        .push_opcode(OP_CAT)
+        .push_opcode(OP_SWAP)
+        .push_opcode(OP_CHECKSIG);
     builder.into_script()
 }
 
@@ -214,7 +230,6 @@ fn compute_sigmsg<S: Into<TapLeafHash>>(tx: &Transaction,
             let hash = sha256::Hash::hash(&buffer);
             hash.consensus_encode(&mut serialized_tx).unwrap();
         }
-        //prevouts.iter().for_each(|p| { p.value.consensus_encode(&mut serialized_tx).unwrap(); });
         {
             let mut buffer = Vec::new();
             for p in prevouts {
@@ -224,7 +239,6 @@ fn compute_sigmsg<S: Into<TapLeafHash>>(tx: &Transaction,
             let hash = sha256::Hash::hash(&buffer);
             hash.consensus_encode(&mut serialized_tx).unwrap();
         }
-        //prevouts.iter().for_each(|p| { p.script_pubkey.consensus_encode(&mut serialized_tx).unwrap(); });
         {
             let mut buffer = Vec::new();
             for i in tx.input.iter() {
@@ -234,7 +248,6 @@ fn compute_sigmsg<S: Into<TapLeafHash>>(tx: &Transaction,
             let hash = sha256::Hash::hash(&buffer);
             hash.consensus_encode(&mut serialized_tx).unwrap();
         }
-        //tx.input.iter().for_each(|input| { input.sequence.consensus_encode(&mut serialized_tx).unwrap(); })
     }
 
     // If hash_type & 3 does not equal SIGHASH_NONE or SIGHASH_SINGLE:
