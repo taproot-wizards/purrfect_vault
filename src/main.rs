@@ -50,12 +50,13 @@ fn main() {
     txin.witness.push(&taproot_spend_info.control_block(&(script.clone(), LeafVersion::TapScript)).expect("control block should work").serialize());
 
 
-    let mut amount = 99_900_000;
+    let amount = 99_900_000;
+    let mut locktime = 0;
     let mut spend_tx;
 
     loop {
         spend_tx = Transaction {
-            lock_time: LockTime::ZERO,
+            lock_time: LockTime::from_height(locktime).unwrap(),
             version: Version::TWO,
             input: vec![
                 txin.clone()
@@ -85,15 +86,15 @@ fn main() {
             s: challenge.into(),
             R,
         };
-        println!("signature: {}", signature.to_string());
         // println!("challenge: {}", challenge.to_string());
         if challenge.to_bytes()[31] == 0x01 {
             println!("Found a challenge with a 1 at the end!");
-            println!("Amount is {}", amount);
+            println!("locktime is {}", locktime);
             println!("Here's the challenge: {}", challenge.to_string());
+            println!("Here's the signature: {}", signature.to_string());
             break;
         }
-        amount += 1;
+        locktime += 1;
     }
 
 
