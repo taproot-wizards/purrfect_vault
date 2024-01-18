@@ -15,6 +15,11 @@ use secp256kfun::G;
 use secp256kfun::marker::Public;
 use anyhow::Result;
 use bitcoin::hashes::{Hash, HashEngine, sha256};
+use lazy_static::lazy_static;
+
+lazy_static!(
+    static ref G_X: [u8; 32] = G.into_point_with_even_y().0.to_xonly_bytes();
+);
 
 fn main() {
     println!("lets do something with cat... or something");
@@ -325,18 +330,16 @@ fn compute_sigmsg<S: Into<TapLeafHash>>(tx: &Transaction,
 }
 
 fn compute_challenge(sigmsg: &[u8;32]) -> [u8;32] {
-    let g_x = G.into_point_with_even_y().0.to_xonly_bytes();
     let mut buffer = Vec::new();
-    buffer.append(&mut g_x.to_vec());
-    buffer.append(&mut g_x.to_vec());
+    buffer.append(&mut G_X.to_vec());
+    buffer.append(&mut G_X.to_vec());
     buffer.append(&mut sigmsg.to_vec());
     make_tagged_hash("BIP0340/challenge".as_bytes(), buffer.as_slice())
 }
 
 fn make_signature(challenge: &[u8;32]) -> [u8; 64] {
-    let g_x = G.into_point_with_even_y().0.to_xonly_bytes();
     let mut signature: [u8; 64] = [0; 64];
-    signature[0..32].copy_from_slice(&g_x);
+    signature[0..32].copy_from_slice(&G_X.as_slice());
     signature[32..64].copy_from_slice(challenge);
     signature
 }

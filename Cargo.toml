@@ -10,6 +10,7 @@ anyhow = "1.0.79"
 bitcoin = "0.31.1"
 bitcoin-rpc = "0.2.0"
 hex = "0.4.3"
+lazy_static = "1.4.0"
 rand = "0.4.6"
 
 schnorr_fun = "0.9.2"
