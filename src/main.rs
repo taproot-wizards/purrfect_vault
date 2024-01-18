@@ -78,7 +78,7 @@ fn main() {
         };
         let sighash = sighash_cache.taproot_script_spend_signature_hash(0, &Prevouts::All(&[txout.clone()]), TapLeafHash::from_script(&script, LeafVersion::TapScript), TapSighashType::Default).unwrap();
         let computed_sighash = sighash.clone().into_32();
-        let my_computed_sighash = compute_signature_with_raw_ops(&spend_tx, 0, &[txout], None, TapLeafHash::from_script(&script, LeafVersion::TapScript), TapSighashType::Default).unwrap();
+        let my_computed_sighash = compute_sigmsg(&spend_tx, 0, &[txout], None, TapLeafHash::from_script(&script, LeafVersion::TapScript), TapSighashType::Default).unwrap();
         assert_eq!(computed_sighash, my_computed_sighash);
         let schnorr = schnorr_fun::test_instance!();
         let R = G.into_point_with_even_y().0;
@@ -86,11 +86,17 @@ fn main() {
         let sighash_bytes = sighash.clone().into_32();
         let message: Message<Public> = Message::raw(&sighash_bytes);
         let challenge = schnorr.challenge(&R, &P, message);
+        let my_challenge = compute_challenge(&my_computed_sighash);
+        assert_eq!(challenge.to_bytes(), my_challenge);
+        println!("challenge looks good!");
 
         let signature = Signature {
             s: challenge.into(),
             R,
         };
+        let my_signature = make_signature(&my_challenge);
+        assert_eq!(signature.to_bytes(), my_signature);
+        println!("signature looks good!");
         // println!("challenge: {}", challenge.to_string());
         if challenge.to_bytes()[31] == 0x01 {
             println!("Found a challenge with a 1 at the end!");
@@ -128,12 +134,12 @@ fn checksig_script() -> ScriptBuf {
     builder.into_script()
 }
 
-fn compute_signature_with_raw_ops<S: Into<TapLeafHash>>(tx: &Transaction,
-                                                        input_index: usize,
-                                                        prevouts: &[TxOut],
-                                                        annex: Option<Annex>,
-                                                        leaf_hash: S,
-                                                        sighash_type: TapSighashType) -> Result<[u8;32]> {
+fn compute_sigmsg<S: Into<TapLeafHash>>(tx: &Transaction,
+                                        input_index: usize,
+                                        prevouts: &[TxOut],
+                                        annex: Option<Annex>,
+                                        leaf_hash: S,
+                                        sighash_type: TapSighashType) -> Result<[u8;32]> {
 
     let mut hashed_tag = sha256::Hash::engine();
     hashed_tag.input("TapSighash".as_bytes());
@@ -316,6 +322,23 @@ fn compute_signature_with_raw_ops<S: Into<TapLeafHash>>(tx: &Transaction,
     let tagged_hash = sha256::Hash::from_engine(serialized_tx);
 
     Ok(tagged_hash.into_32())
+}
+
+fn compute_challenge(sigmsg: &[u8;32]) -> [u8;32] {
+    let g_x = G.into_point_with_even_y().0.to_xonly_bytes();
+    let mut buffer = Vec::new();
+    buffer.append(&mut g_x.to_vec());
+    buffer.append(&mut g_x.to_vec());
+    buffer.append(&mut sigmsg.to_vec());
+    make_tagged_hash("BIP0340/challenge".as_bytes(), buffer.as_slice())
+}
+
+fn make_signature(challenge: &[u8;32]) -> [u8; 64] {
+    let g_x = G.into_point_with_even_y().0.to_xonly_bytes();
+    let mut signature: [u8; 64] = [0; 64];
+    signature[0..32].copy_from_slice(&g_x);
+    signature[32..64].copy_from_slice(challenge);
+    signature
 }
 
 fn make_tagged_hash(tag: &[u8], data: &[u8]) -> [u8;32] {
