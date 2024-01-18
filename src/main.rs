@@ -1,10 +1,10 @@
 use std::str::FromStr;
-use bitcoin::{Address, Amount, OutPoint, Script, ScriptBuf, TapLeafHash, TapSighash, TapSighashType, Transaction, TxIn, TxOut};
+use bitcoin::{Address, Amount, Network, OutPoint, Script, ScriptBuf, TapLeafHash, TapSighash, TapSighashType, Transaction, TxIn, TxOut};
 use bitcoin::absolute::LockTime;
 use bitcoin::consensus::Encodable;
 use bitcoin::key::{UntweakedKeypair};
 use bitcoin::Network::Regtest;
-use bitcoin::opcodes::all::{OP_2DUP, OP_CAT, OP_CHECKSIG, OP_CHECKSIGVERIFY, OP_DUP, OP_EQUAL, OP_EQUALVERIFY, OP_ROT, OP_SHA256, OP_SWAP};
+use bitcoin::opcodes::all::{OP_2DUP, OP_CAT, OP_CHECKSIGVERIFY, OP_DUP, OP_EQUAL, OP_EQUALVERIFY, OP_ROT, OP_SHA256};
 
 use bitcoin::secp256k1::{Secp256k1, ThirtyTwoByteHash};
 use bitcoin::sighash::{Annex, Error, Prevouts, SighashCache};
@@ -16,18 +16,21 @@ use secp256kfun::marker::Public;
 use anyhow::Result;
 use bitcoin::hashes::{Hash, HashEngine, sha256};
 use bitcoin::hex::{Case, DisplayHex};
+use bitcoincore_rpc::{Auth, Client};
 use lazy_static::lazy_static;
 
 lazy_static!(
     static ref G_X: [u8; 32] = G.into_point_with_even_y().0.to_xonly_bytes();
 );
 
-fn main() {
+fn main() -> Result<()> {
     println!("lets do something with cat... or something");
+
+    let client = get_rpc_client(Regtest, Auth::None)?;
 
     let secp = Secp256k1::new();
 
-    let key_pair = UntweakedKeypair::from_seckey_slice(&secp, &[0x01; 32]).unwrap();
+    let key_pair = UntweakedKeypair::from_seckey_slice(&secp, &[0x01; 32])?;
 
     let script = checksig_script();
 
@@ -132,6 +135,8 @@ fn main() {
     spend_tx.consensus_encode(&mut serialized_tx).unwrap();
 
     println!("Serialized transaction (hex): {}", hex::encode(serialized_tx));
+
+    Ok(())
 }
 
 
@@ -382,4 +387,15 @@ fn make_tagged_hash(tag: &[u8], data: &[u8]) -> [u8;32] {
     let message = sha256::Hash::from_engine(message);
     message.into_32()
 
+}
+
+fn get_rpc_client(network: Network, auth: Auth) -> Result<Client> {
+    let url = match network {
+        Network::Bitcoin => "http://localhost:8332",
+        Network::Testnet => "http://localhost:18332",
+        Network::Regtest => "http://localhost:18443",
+        Network::Signet => "http://localhost:38332",
+        _ => {unreachable!("Network not supported")}
+    };
+    Ok(Client::new(url, auth)?)
 }
