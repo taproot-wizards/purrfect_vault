@@ -4,7 +4,7 @@ use bitcoin::absolute::LockTime;
 use bitcoin::consensus::Encodable;
 use bitcoin::key::{UntweakedKeypair};
 use bitcoin::Network::Regtest;
-use bitcoin::opcodes::all::{OP_CAT, OP_CHECKSIG, OP_EQUAL, OP_SHA256, OP_SWAP};
+use bitcoin::opcodes::all::{OP_2DUP, OP_CAT, OP_CHECKSIG, OP_CHECKSIGVERIFY, OP_DUP, OP_EQUAL, OP_EQUALVERIFY, OP_ROT, OP_SHA256, OP_SWAP};
 
 use bitcoin::secp256k1::{Secp256k1, ThirtyTwoByteHash};
 use bitcoin::sighash::{Annex, Error, Prevouts, SighashCache};
@@ -44,7 +44,7 @@ fn main() {
 
     let mut txin = TxIn {
         previous_output: OutPoint {
-            txid: "b3d7a11706d0d14daa2438155eae77cd67c1ce76ec87faa4ed5324e582921a24".parse().expect("txid should be valid"),
+            txid: "be52d27ab4ebed165cf3128332a12574c81f23eb733ebc879e39d3dc8a6a59a0".parse().expect("txid should be valid"),
             vout: 0,
         },
         script_sig: Default::default(),
@@ -57,6 +57,7 @@ fn main() {
     let mut locktime = 0;
     let mut spend_tx;
     let mut final_signature = [0u8; 64];
+    let mut final_challenge = [0u8; 32];
 
     loop {
         spend_tx = Transaction {
@@ -68,7 +69,7 @@ fn main() {
             output: vec![
                 TxOut {
                     value: Amount::from_sat(amount),
-                    script_pubkey: Address::from_str("bcrt1pgrtk9utf7rrt6v9t8cupeyggdtavhdangdcruducjka5zs4r8lsqqw3yxn").expect("address should be valid").assume_checked().script_pubkey(),
+                    script_pubkey: Address::from_str("bcrt1py9ccnmdrk9z4ylvgt68htyazmssvsz0cdzjcm3p3m75dsc0j203q37qzse").expect("address should be valid").assume_checked().script_pubkey(),
                 }
             ],
         };
@@ -108,18 +109,19 @@ fn main() {
             println!("Here's the signature: {}", signature.to_string());
             println!("Here's G_X: {}", G_X.to_hex_string(Case::Lower));
             final_signature = signature.to_bytes();
+            final_challenge = challenge.to_bytes();
             break;
         }
         locktime += 1;
     }
 
 
-    let mut maliated_signature = [0u8; 63];
-    maliated_signature.copy_from_slice(&final_signature[0..63]);
+    let mut maliated_challenge = [0u8; 31];
+    maliated_challenge.copy_from_slice(&final_challenge[0..31]);
 
     //txin.witness.push(final_signature.to_vec());
     txin.witness.push(G_X.as_slice());
-    txin.witness.push(maliated_signature.to_vec());
+    txin.witness.push(maliated_challenge.to_vec());
 
     println!("length of G_X: {}", G_X.as_slice().len());
     txin.witness.push(script.clone().to_bytes());
@@ -145,13 +147,20 @@ fn hello_world_script() -> ScriptBuf {
     builder.into_script()
 }
 
+
+// 2DUP CAT ROT DUP <G> EQUALVERIFY CHECKSIG
 fn checksig_script() -> ScriptBuf {
     let mut builder = Script::builder();
     builder = builder
+        .push_opcode(OP_2DUP)
         .push_int(0x02)
         .push_opcode(OP_CAT)
-        .push_opcode(OP_SWAP)
-        .push_opcode(OP_CHECKSIG);
+        .push_opcode(OP_CAT)
+        .push_opcode(OP_ROT)
+        .push_opcode(OP_DUP)
+        .push_slice(*G_X)
+        .push_opcode(OP_EQUALVERIFY)
+        .push_opcode(OP_CHECKSIGVERIFY);
     builder.into_script()
 }
 
