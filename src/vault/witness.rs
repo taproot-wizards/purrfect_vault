@@ -1,22 +1,8 @@
-use std::str::FromStr;
-use bitcoin::{Address, Amount, Network, OutPoint, Script, ScriptBuf, TapLeafHash, TapSighash, TapSighashType, Transaction, TxIn, TxOut};
-use bitcoin::absolute::LockTime;
-use bitcoin::consensus::Encodable;
-use bitcoin::key::{UntweakedKeypair};
-use bitcoin::Network::Regtest;
-use bitcoin::opcodes::all::{OP_2DUP, OP_CAT, OP_CHECKSIGVERIFY, OP_DUP, OP_EQUAL, OP_EQUALVERIFY, OP_ROT, OP_SHA256};
-
-use bitcoin::secp256k1::{Secp256k1, ThirtyTwoByteHash};
-use bitcoin::sighash::{Annex, Error, Prevouts, SighashCache};
-use bitcoin::taproot::{LeafVersion, TaprootBuilder};
-use bitcoin::transaction::Version;
-use schnorr_fun::{Message, Signature};
-use secp256kfun::G;
-use secp256kfun::marker::Public;
 use anyhow::Result;
-use bitcoin::hashes::{Hash, HashEngine, sha256};
-use bitcoin::hex::{Case, DisplayHex};
-use bitcoincore_rpc::{Auth, Client};
+use bitcoin::{TapLeafHash, TapSighashType, Transaction, TxOut};
+use bitcoin::consensus::Encodable;
+use bitcoin::hashes::{Hash, sha256};
+use bitcoin::sighash::{Annex, Error};
 
 pub(crate) struct TxCommitmentSpec {
     epoch: bool,

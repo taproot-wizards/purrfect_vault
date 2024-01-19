@@ -90,6 +90,7 @@ fn main() -> Result<()> {
         let computed_sighash = sighash.clone().into_32();
         let my_computed_sighash = compute_sigmsg(&spend_tx, 0, &[txout], None, TapLeafHash::from_script(&script, LeafVersion::TapScript), TapSighashType::Default).unwrap();
         assert_eq!(computed_sighash, my_computed_sighash);
+        println!("here is the sighash: {}", my_computed_sighash.to_hex_string(Case::Lower));
         let schnorr = schnorr_fun::test_instance!();
         let R = G.into_point_with_even_y().0;
         let P = G.into_point_with_even_y().0;
@@ -168,7 +169,9 @@ fn compute_sigmsg<S: Into<TapLeafHash>>(tx: &Transaction,
     }
 
     let components = get_sigmsg_components(&TxCommitmentSpec::default(), tx, input_index, prevouts, annex.clone(), leaf_hash, sighash_type)?;
+    println!("Start");
     for component in components.iter() {
+        println!("<0x{}>", component.to_hex_string(Case::Lower));
         serialized_tx.input(component.as_slice());
     }
 
