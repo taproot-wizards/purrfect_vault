@@ -1,3 +1,5 @@
+mod vault;
+
 use std::str::FromStr;
 use bitcoin::{Address, Amount, Network, OutPoint, Script, ScriptBuf, TapLeafHash, TapSighash, TapSighashType, Transaction, TxIn, TxOut};
 use bitcoin::absolute::LockTime;
@@ -18,6 +20,8 @@ use bitcoin::hashes::{Hash, HashEngine, sha256};
 use bitcoin::hex::{Case, DisplayHex};
 use bitcoincore_rpc::{Auth, Client};
 use lazy_static::lazy_static;
+use crate::vault::script::basic_sig_assert;
+use crate::vault::witness::{get_sigmsg_components, TxCommitmentSpec};
 
 lazy_static!(
     static ref G_X: [u8; 32] = G.into_point_with_even_y().0.to_xonly_bytes();
@@ -32,7 +36,7 @@ fn main() -> Result<()> {
 
     let key_pair = UntweakedKeypair::from_seckey_slice(&secp, &[0x01; 32])?;
 
-    let script = checksig_script();
+    let script = basic_sig_assert();
 
     let taproot_spend_info = TaprootBuilder::new()
         .add_leaf(0, script.clone())
@@ -140,34 +144,7 @@ fn main() -> Result<()> {
 }
 
 
-fn hello_world_script() -> ScriptBuf {
-    let hashed_data = hex::decode("936a185caaa266bb9cbe981e9e05cb78cd732b0b3280eb944412bb6f8f8f07af").unwrap();
-    let hash_bytes: [u8; 32] = hashed_data.try_into().unwrap();
 
-    let mut builder = Script::builder();
-    builder = builder.push_opcode(OP_CAT)
-        .push_opcode(OP_SHA256)
-        .push_slice(hash_bytes)
-        .push_opcode(OP_EQUAL);
-    builder.into_script()
-}
-
-
-// 2DUP CAT ROT DUP <G> EQUALVERIFY CHECKSIG
-fn checksig_script() -> ScriptBuf {
-    let mut builder = Script::builder();
-    builder = builder
-        .push_opcode(OP_2DUP)
-        .push_int(0x02)
-        .push_opcode(OP_CAT)
-        .push_opcode(OP_CAT)
-        .push_opcode(OP_ROT)
-        .push_opcode(OP_DUP)
-        .push_slice(*G_X)
-        .push_opcode(OP_EQUALVERIFY)
-        .push_opcode(OP_CHECKSIGVERIFY);
-    builder.into_script()
-}
 
 fn compute_sigmsg<S: Into<TapLeafHash>>(tx: &Transaction,
                                         input_index: usize,
@@ -188,174 +165,17 @@ fn compute_sigmsg<S: Into<TapLeafHash>>(tx: &Transaction,
     {
         let tapsighash_engine = TapSighash::engine();
         assert_eq!(tapsighash_engine.midstate(), serialized_tx.midstate());
-        // println!("Same midstate");
     }
 
-    let leaf_hash_code_separator = Some((leaf_hash.into(), 0xFFFFFFFFu32));
-
-    // all this serialization code was lifted from bitcoin-0.31.1/src/crypto/sighash.rs:597 and
-    // then violently hacked up
-
-    let (sighash, anyone_can_pay) = match sighash_type {
-        TapSighashType::Default => (bitcoin::TapSighashType::Default, false),
-        TapSighashType::All => (bitcoin::TapSighashType::All, false),
-        TapSighashType::None => (bitcoin::TapSighashType::None, false),
-        TapSighashType::Single => (bitcoin::TapSighashType::Single, false),
-        TapSighashType::AllPlusAnyoneCanPay => (TapSighashType::All, true),
-        TapSighashType::NonePlusAnyoneCanPay => (bitcoin::TapSighashType::None, true),
-        TapSighashType::SinglePlusAnyoneCanPay => (TapSighashType::Single, true),
-    };
-
-    // epoch
-    0u8.consensus_encode(&mut serialized_tx)?;
-
-    // * Control:
-    // hash_type (1).
-    (sighash_type as u8).consensus_encode(&mut serialized_tx)?;
-
-    // * Transaction Data:
-    // nVersion (4): the nVersion of the transaction.
-    tx.version.consensus_encode(&mut serialized_tx)?;
-
-    // nLockTime (4): the nLockTime of the transaction.
-    tx.lock_time.consensus_encode(&mut serialized_tx)?;
-
-    // If the hash_type & 0x80 does not equal SIGHASH_ANYONECANPAY:
-    //     sha_prevouts (32): the SHA256 of the serialization of all input outpoints.
-    //     sha_amounts (32): the SHA256 of the serialization of all spent output amounts.
-    //     sha_scriptpubkeys (32): the SHA256 of the serialization of all spent output scriptPubKeys.
-    //     sha_sequences (32): the SHA256 of the serialization of all input nSequence.
-    if !anyone_can_pay {
-        {
-            let mut buffer = Vec::new();
-            for prevout in tx.input.iter() {
-                prevout.previous_output.consensus_encode(&mut buffer).unwrap();
-            }
-
-            let hash = sha256::Hash::hash(&buffer);
-            hash.consensus_encode(&mut serialized_tx).unwrap();
-        }
-        {
-            let mut buffer = Vec::new();
-            for p in prevouts {
-                p.value.consensus_encode(&mut buffer).unwrap();
-            }
-
-            let hash = sha256::Hash::hash(&buffer);
-            hash.consensus_encode(&mut serialized_tx).unwrap();
-        }
-        {
-            let mut buffer = Vec::new();
-            for p in prevouts {
-                p.script_pubkey.consensus_encode(&mut buffer).unwrap();
-            }
-
-            let hash = sha256::Hash::hash(&buffer);
-            hash.consensus_encode(&mut serialized_tx).unwrap();
-        }
-        {
-            let mut buffer = Vec::new();
-            for i in tx.input.iter() {
-                i.sequence.consensus_encode(&mut buffer).unwrap();
-            }
-
-            let hash = sha256::Hash::hash(&buffer);
-            hash.consensus_encode(&mut serialized_tx).unwrap();
-        }
-    }
-
-    // If hash_type & 3 does not equal SIGHASH_NONE or SIGHASH_SINGLE:
-    //     sha_outputs (32): the SHA256 of the serialization of all outputs in CTxOut format.
-    if sighash != TapSighashType::None && sighash != TapSighashType::Single {
-        let mut buffer = Vec::new();
-        for o in tx.output.iter() {
-            o.consensus_encode(&mut buffer).unwrap();
-        }
-        let hash = sha256::Hash::hash(&buffer);
-        hash.consensus_encode(&mut serialized_tx).unwrap();
-        // tx.output.iter().for_each(|output| { output.consensus_encode(&mut serialized_tx).unwrap(); });
-    }
-
-    // * Data about this input:
-    // spend_type (1): equal to (ext_flag * 2) + annex_present, where annex_present is 0
-    // if no annex is present, or 1 otherwise
-    let mut spend_type = 0u8;
-    if annex.is_some() {
-        spend_type |= 1u8;
-    }
-    if leaf_hash_code_separator.is_some() {
-        spend_type |= 2u8;
-    }
-    spend_type.consensus_encode(&mut serialized_tx)?;
-
-    // If hash_type & 0x80 equals SIGHASH_ANYONECANPAY:
-    //      outpoint (36): the COutPoint of this input (32-byte hash + 4-byte little-endian).
-    //      amount (8): value of the previous output spent by this input.
-    //      scriptPubKey (35): scriptPubKey of the previous output spent by this input, serialized as script inside CTxOut. Its size is always 35 bytes.
-    //      nSequence (4): nSequence of this input.
-    if anyone_can_pay {
-        let txin =
-            &tx.input.get(input_index).ok_or(Error::IndexOutOfInputsBounds {
-                index: input_index,
-                inputs_size: tx.input.len(),
-            })?;
-        let previous_output = prevouts.get(input_index).ok_or(Error::IndexOutOfInputsBounds {
-            index: input_index,
-            inputs_size: prevouts.len(),
-        })?;
-        txin.previous_output.consensus_encode(&mut serialized_tx)?;
-        previous_output.value.consensus_encode(&mut serialized_tx)?;
-        previous_output.script_pubkey.consensus_encode(&mut serialized_tx)?;
-        txin.sequence.consensus_encode(&mut serialized_tx)?;
-    } else {
-        (input_index as u32).consensus_encode(&mut serialized_tx)?;
-    }
-
-    // If an annex is present (the lowest bit of spend_type is set):
-    //      sha_annex (32): the SHA256 of (compact_size(size of annex) || annex), where annex
-    //      includes the mandatory 0x50 prefix.
-    if let Some(annex) = annex {
-        let mut enc = sha256::Hash::engine();
-        annex.consensus_encode(&mut enc)?;
-        let hash = sha256::Hash::from_engine(enc);
-        hash.consensus_encode(&mut serialized_tx)?;
-    }
-
-    // * Data about this output:
-    // If hash_type & 3 equals SIGHASH_SINGLE:
-    //      sha_single_output (32): the SHA256 of the corresponding output in CTxOut format.
-    if sighash == TapSighashType::Single {
-        let mut enc = sha256::Hash::engine();
-        tx
-            .output
-            .get(input_index)
-            .ok_or(Error::SingleWithoutCorrespondingOutput {
-                index: input_index,
-                outputs_size: tx.output.len(),
-            })?
-            .consensus_encode(&mut enc)?;
-        let hash = sha256::Hash::from_engine(enc);
-        hash.consensus_encode(&mut serialized_tx)?;
-    }
-
-    //     if (scriptpath):
-    //         ss += TaggedHash("TapLeaf", bytes([leaf_ver]) + ser_string(script))
-    //         ss += bytes([0])
-    //         ss += struct.pack("<i", codeseparator_pos)
-
-    let KEY_VERSION_0 = 0u8;
-
-    if let Some((hash, code_separator_pos)) = leaf_hash_code_separator {
-        hash.as_byte_array().consensus_encode(&mut serialized_tx)?;
-        KEY_VERSION_0.consensus_encode(&mut serialized_tx)?;
-        code_separator_pos.consensus_encode(&mut serialized_tx)?;
+    let components = get_sigmsg_components(&TxCommitmentSpec::default(), tx, input_index, prevouts, annex.clone(), leaf_hash, sighash_type)?;
+    for component in components.iter() {
+        serialized_tx.input(component.as_slice());
     }
 
     let tagged_hash = sha256::Hash::from_engine(serialized_tx);
 
     Ok(tagged_hash.into_32())
 }
-
 fn compute_challenge(sigmsg: &[u8;32]) -> [u8;32] {
     let mut buffer = Vec::new();
     buffer.append(&mut G_X.to_vec());
