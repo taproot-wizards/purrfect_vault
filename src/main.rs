@@ -6,7 +6,6 @@ use bitcoin::absolute::LockTime;
 use bitcoin::consensus::Encodable;
 use bitcoin::key::{UntweakedKeypair};
 use bitcoin::Network::Regtest;
-use bitcoin::opcodes::all::{OP_2DUP, OP_CAT, OP_CHECKSIGVERIFY, OP_DUP, OP_EQUAL, OP_EQUALVERIFY, OP_ROT, OP_SHA256};
 
 use bitcoin::secp256k1::{Secp256k1, ThirtyTwoByteHash};
 use bitcoin::sighash::{Annex, Error, Prevouts, SighashCache};
@@ -20,7 +19,7 @@ use bitcoin::hashes::{Hash, HashEngine, sha256};
 use bitcoin::hex::{Case, DisplayHex};
 use bitcoincore_rpc::{Auth, Client};
 use lazy_static::lazy_static;
-use crate::vault::script::basic_sig_assert;
+use crate::vault::script::{assemble_whole_sig, basic_sig_assert};
 use crate::vault::witness::{get_sigmsg_components, TxCommitmentSpec};
 
 lazy_static!(
@@ -36,7 +35,7 @@ fn main() -> Result<()> {
 
     let key_pair = UntweakedKeypair::from_seckey_slice(&secp, &[0x01; 32])?;
 
-    let script = basic_sig_assert();
+    let script = assemble_whole_sig();
 
     let taproot_spend_info = TaprootBuilder::new()
         .add_leaf(0, script.clone())
@@ -51,8 +50,8 @@ fn main() -> Result<()> {
 
     let mut txin = TxIn {
         previous_output: OutPoint {
-            txid: "be52d27ab4ebed165cf3128332a12574c81f23eb733ebc879e39d3dc8a6a59a0".parse().expect("txid should be valid"),
-            vout: 0,
+            txid: "de5b6f9fec77e951ec0f386046ac8abbd83ff3bfc787455821c633379ffa77f2".parse().expect("txid should be valid"),
+            vout: 1,
         },
         script_sig: Default::default(),
         sequence: Default::default(),
@@ -63,8 +62,7 @@ fn main() -> Result<()> {
     let amount = 99_900_000;
     let mut locktime = 0;
     let mut spend_tx;
-    let mut final_signature = [0u8; 64];
-    let mut final_challenge = [0u8; 32];
+    let mut final_components: Vec<Vec<u8>> = Vec::new();
 
     loop {
         spend_tx = Transaction {
@@ -88,9 +86,7 @@ fn main() -> Result<()> {
         };
         let sighash = sighash_cache.taproot_script_spend_signature_hash(0, &Prevouts::All(&[txout.clone()]), TapLeafHash::from_script(&script, LeafVersion::TapScript), TapSighashType::Default).unwrap();
         let computed_sighash = sighash.clone().into_32();
-        let my_computed_sighash = compute_sigmsg(&spend_tx, 0, &[txout], None, TapLeafHash::from_script(&script, LeafVersion::TapScript), TapSighashType::Default).unwrap();
-        assert_eq!(computed_sighash, my_computed_sighash);
-        println!("here is the sighash: {}", my_computed_sighash.to_hex_string(Case::Lower));
+        let components = get_sigmsg_components(&TxCommitmentSpec::default(), &spend_tx, 0, &[txout.clone()], None, TapLeafHash::from_script(&script, LeafVersion::TapScript), TapSighashType::Default)?;
         let schnorr = schnorr_fun::test_instance!();
         let R = G.into_point_with_even_y().0;
         let P = G.into_point_with_even_y().0;
@@ -98,15 +94,13 @@ fn main() -> Result<()> {
         let sighash_bytes = sighash.clone().into_32();
         let message: Message<Public> = Message::raw(&sighash_bytes);
         let challenge = schnorr.challenge(&R, &P, message);
-        let my_challenge = compute_challenge(&my_computed_sighash);
-        assert_eq!(challenge.to_bytes(), my_challenge);
         //println!("challenge looks good!");
 
         let signature = Signature {
             s: challenge.into(),
             R,
         };
-        let my_signature = make_signature(&my_challenge);
+        let my_signature = compute_signature_from_components(&components)?;
         assert_eq!(signature.to_bytes(), my_signature);
         //println!("signature looks good!");
         // println!("challenge: {}", challenge.to_string());
@@ -116,22 +110,22 @@ fn main() -> Result<()> {
             println!("Here's the challenge: {}", challenge.to_string());
             println!("Here's the signature: {}", signature.to_string());
             println!("Here's G_X: {}", G_X.to_hex_string(Case::Lower));
-            final_signature = signature.to_bytes();
-            final_challenge = challenge.to_bytes();
+            final_components = components;
             break;
         }
         locktime += 1;
     }
 
 
-    let mut maliated_challenge = [0u8; 31];
-    maliated_challenge.copy_from_slice(&final_challenge[0..31]);
 
-    //txin.witness.push(final_signature.to_vec());
-    txin.witness.push(G_X.as_slice());
-    txin.witness.push(maliated_challenge.to_vec());
+    for component in final_components.iter() {
+        println!("<0x{}>", component.to_hex_string(Case::Lower));
+        txin.witness.push(component.as_slice());
+    }
+    let computed_signature  = compute_signature_from_components(&final_components)?;
+    let mangled_signature: [u8;63] = computed_signature[0..63].try_into().unwrap();
+    txin.witness.push(&mangled_signature);
 
-    println!("length of G_X: {}", G_X.as_slice().len());
     txin.witness.push(script.clone().to_bytes());
     txin.witness.push(&taproot_spend_info.control_block(&(script.clone(), LeafVersion::TapScript)).expect("control block should work").serialize());
     spend_tx.input.first_mut().unwrap().witness = txin.witness.clone();
@@ -146,6 +140,32 @@ fn main() -> Result<()> {
 
 
 
+fn compute_signature_from_components(components: &Vec<Vec<u8>>) -> Result<[u8; 64]> {
+    let mut hashed_tag = sha256::Hash::engine();
+    hashed_tag.input("TapSighash".as_bytes());
+    let hashed_tag = sha256::Hash::from_engine(hashed_tag);
+
+    let mut serialized_tx = sha256::Hash::engine();
+    serialized_tx.input(hashed_tag.as_ref());
+    serialized_tx.input(hashed_tag.as_ref());
+
+    {
+        let tapsighash_engine = TapSighash::engine();
+        assert_eq!(tapsighash_engine.midstate(), serialized_tx.midstate());
+    }
+
+    for component in components.iter() {
+        serialized_tx.input(component.as_slice());
+    }
+
+    let tagged_hash = sha256::Hash::from_engine(serialized_tx);
+    let mut buffer = Vec::new();
+    buffer.append(&mut G_X.to_vec());
+    buffer.append(&mut G_X.to_vec());
+    buffer.append(&mut tagged_hash.into_32().to_vec());
+    let challenge = make_tagged_hash("BIP0340/challenge".as_bytes(), buffer.as_slice());
+    Ok(make_signature(&challenge))
+}
 
 fn compute_sigmsg<S: Into<TapLeafHash>>(tx: &Transaction,
                                         input_index: usize,

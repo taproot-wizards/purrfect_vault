@@ -4,8 +4,18 @@ use lazy_static::lazy_static;
 use crate::G_X;
 
 lazy_static!(
-    static ref TAPSIGHASH_TAG: [u8; 10] = "TapSighash".as_bytes().try_into().unwrap();
-    static ref BIP0340_CHALLENGE_TAG: [u8; 16] = "BIP0340/challenge".as_bytes().try_into().unwrap();
+    static ref TAPSIGHASH_TAG: [u8; 10] = {
+        let mut tag = [0u8; 10];
+        let val = "TapSighash".as_bytes();
+        tag.copy_from_slice(val);
+        tag
+    };
+    static ref BIP0340_CHALLENGE_TAG: [u8; 17] = {
+        let mut tag = [0u8; 17];
+        let val = "BIP0340/challenge".as_bytes();
+        tag.copy_from_slice(val);
+        tag
+        };
 );
 
 pub(crate) fn hello_world_script() -> ScriptBuf {
