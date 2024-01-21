@@ -4,20 +4,21 @@ use bitcoin::consensus::Encodable;
 use bitcoin::hashes::{Hash, sha256};
 use bitcoin::sighash::{Annex, Error};
 
+#[derive()]
 pub(crate) struct TxCommitmentSpec {
-    epoch: bool,
-    control: bool,
-    version: bool,
-    lock_time: bool,
-    prevouts: bool,
-    prev_amounts:bool,
-    prev_sciptpubkeys:bool,
-    sequences:bool,
-    outputs: bool,
-    spend_type: bool,
-    annex: bool,
-    single_output: bool,
-    scriptpath: bool,
+    pub(crate) epoch: bool,
+    pub(crate) control: bool,
+    pub(crate) version: bool,
+    pub(crate) lock_time: bool,
+    pub(crate) prevouts: bool,
+    pub(crate) prev_amounts:bool,
+    pub(crate) prev_sciptpubkeys:bool,
+    pub(crate) sequences:bool,
+   pub(crate)  outputs: bool,
+    pub(crate) spend_type: bool,
+    pub(crate) annex: bool,
+    pub(crate) single_output: bool,
+    pub(crate) scriptpath: bool,
 }
 
 impl Default for TxCommitmentSpec {

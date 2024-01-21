@@ -19,7 +19,7 @@ use bitcoin::hashes::{Hash, HashEngine, sha256};
 use bitcoin::hex::{Case, DisplayHex};
 use bitcoincore_rpc::{Auth, Client};
 use lazy_static::lazy_static;
-use crate::vault::script::{assemble_whole_sig, basic_sig_assert};
+use crate::vault::script::{assemble_whole_sig, basic_sig_assert, constrained_outputs};
 use crate::vault::witness::{get_sigmsg_components, TxCommitmentSpec};
 
 lazy_static!(
@@ -35,7 +35,20 @@ fn main() -> Result<()> {
 
     let key_pair = UntweakedKeypair::from_seckey_slice(&secp, &[0x01; 32])?;
 
-    let script = assemble_whole_sig();
+    let amount = 99_900_000;
+
+    let outputs = TxOut {
+        value: Amount::from_sat(amount),
+        script_pubkey: Address::from_str("bcrt1py9ccnmdrk9z4ylvgt68htyazmssvsz0cdzjcm3p3m75dsc0j203q37qzse").expect("address should be valid").assume_checked().script_pubkey(),
+    };
+    let mut encoded_outputs = Vec::new();
+    outputs.consensus_encode(&mut encoded_outputs)?;
+    let output_for_hash = encoded_outputs.clone();
+    let output_hash = sha256::Hash::hash(&output_for_hash);
+    let mut encoded_output_hash = Vec::new();
+    output_hash.consensus_encode(&mut encoded_output_hash)?;
+    let mut encoded_output_bytes: [u8; 32] = encoded_output_hash.as_slice().try_into()?;
+    let script = constrained_outputs(encoded_output_bytes);
 
     let taproot_spend_info = TaprootBuilder::new()
         .add_leaf(0, script.clone())
@@ -50,7 +63,7 @@ fn main() -> Result<()> {
 
     let mut txin = TxIn {
         previous_output: OutPoint {
-            txid: "de5b6f9fec77e951ec0f386046ac8abbd83ff3bfc787455821c633379ffa77f2".parse().expect("txid should be valid"),
+            txid: "09b8a8b454687cd16bb318a8f94a849412c733217ba91305a19359c71d68ac68".parse().expect("txid should be valid"),
             vout: 1,
         },
         script_sig: Default::default(),
@@ -59,10 +72,10 @@ fn main() -> Result<()> {
     };
 
 
-    let amount = 99_900_000;
     let mut locktime = 0;
     let mut spend_tx;
-    let mut final_components: Vec<Vec<u8>> = Vec::new();
+    let mut witness_components: Vec<Vec<u8>> = Vec::new();
+    let mut signature_components: Vec<Vec<u8>> = Vec::new();
 
     loop {
         spend_tx = Transaction {
@@ -72,10 +85,7 @@ fn main() -> Result<()> {
                 txin.clone()
             ],
             output: vec![
-                TxOut {
-                    value: Amount::from_sat(amount),
-                    script_pubkey: Address::from_str("bcrt1py9ccnmdrk9z4ylvgt68htyazmssvsz0cdzjcm3p3m75dsc0j203q37qzse").expect("address should be valid").assume_checked().script_pubkey(),
-                }
+                outputs.clone()
             ],
         };
 
@@ -86,7 +96,12 @@ fn main() -> Result<()> {
         };
         let sighash = sighash_cache.taproot_script_spend_signature_hash(0, &Prevouts::All(&[txout.clone()]), TapLeafHash::from_script(&script, LeafVersion::TapScript), TapSighashType::Default).unwrap();
         let computed_sighash = sighash.clone().into_32();
-        let components = get_sigmsg_components(&TxCommitmentSpec::default(), &spend_tx, 0, &[txout.clone()], None, TapLeafHash::from_script(&script, LeafVersion::TapScript), TapSighashType::Default)?;
+        let components_for_witness = get_sigmsg_components(&TxCommitmentSpec
+        {
+            outputs: false,
+        ..Default::default()
+
+        }, &spend_tx, 0, &[txout.clone()], None, TapLeafHash::from_script(&script, LeafVersion::TapScript), TapSighashType::Default)?;
         let schnorr = schnorr_fun::test_instance!();
         let R = G.into_point_with_even_y().0;
         let P = G.into_point_with_even_y().0;
@@ -100,6 +115,7 @@ fn main() -> Result<()> {
             s: challenge.into(),
             R,
         };
+        let components = get_sigmsg_components(&TxCommitmentSpec::default(), &spend_tx, 0, &[txout.clone()], None, TapLeafHash::from_script(&script, LeafVersion::TapScript), TapSighashType::Default)?;
         let my_signature = compute_signature_from_components(&components)?;
         assert_eq!(signature.to_bytes(), my_signature);
         //println!("signature looks good!");
@@ -110,7 +126,8 @@ fn main() -> Result<()> {
             println!("Here's the challenge: {}", challenge.to_string());
             println!("Here's the signature: {}", signature.to_string());
             println!("Here's G_X: {}", G_X.to_hex_string(Case::Lower));
-            final_components = components;
+            witness_components = components_for_witness;
+            signature_components = components;
             break;
         }
         locktime += 1;
@@ -118,11 +135,11 @@ fn main() -> Result<()> {
 
 
 
-    for component in final_components.iter() {
+    for component in witness_components.iter() {
         println!("<0x{}>", component.to_hex_string(Case::Lower));
         txin.witness.push(component.as_slice());
     }
-    let computed_signature  = compute_signature_from_components(&final_components)?;
+    let computed_signature  = compute_signature_from_components(&signature_components)?;
     let mangled_signature: [u8;63] = computed_signature[0..63].try_into().unwrap();
     txin.witness.push(&mangled_signature);
 
