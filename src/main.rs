@@ -1,35 +1,53 @@
-mod vault;
-
-use std::str::FromStr;
-use bitcoin::{Address, Amount, Network, OutPoint, Script, ScriptBuf, TapLeafHash, TapSighash, TapSighashType, Transaction, TxIn, TxOut};
+use anyhow::Result;
+use bitcoin::{Address, Amount, Network, OutPoint, TapLeafHash, TapSighash, TapSighashType, Transaction, TxIn, TxOut};
 use bitcoin::absolute::LockTime;
 use bitcoin::consensus::Encodable;
-use bitcoin::key::{UntweakedKeypair};
+use bitcoin::hashes::{Hash, HashEngine, sha256};
+use bitcoin::hex::{Case, DisplayHex};
+use bitcoin::key::UntweakedKeypair;
 use bitcoin::Network::Regtest;
-
 use bitcoin::secp256k1::{Secp256k1, ThirtyTwoByteHash};
-use bitcoin::sighash::{Annex, Error, Prevouts, SighashCache};
+use bitcoin::sighash::{Annex, Prevouts, SighashCache};
 use bitcoin::taproot::{LeafVersion, TaprootBuilder};
 use bitcoin::transaction::Version;
+use bitcoincore_rpc::{Auth, Client, RpcApi};
+use bitcoincore_rpc::bitcoincore_rpc_json::AddressType;
+use clap::Parser;
+use lazy_static::lazy_static;
 use schnorr_fun::{Message, Signature};
 use secp256kfun::G;
 use secp256kfun::marker::Public;
-use anyhow::Result;
-use bitcoin::hashes::{Hash, HashEngine, sha256};
-use bitcoin::hex::{Case, DisplayHex};
-use bitcoincore_rpc::{Auth, Client};
-use lazy_static::lazy_static;
-use crate::vault::script::{assemble_whole_sig, basic_sig_assert, constrained_outputs};
+
+use crate::vault::script::constrained_outputs;
 use crate::vault::witness::{get_sigmsg_components, TxCommitmentSpec};
+
+mod vault;
 
 lazy_static!(
     static ref G_X: [u8; 32] = G.into_point_with_even_y().0.to_xonly_bytes();
 );
 
+#[derive(Parser)]
+struct Cli {
+    #[arg(short, long, default_value_t=Network::Regtest)]
+    network: Network,
+}
+
 fn main() -> Result<()> {
     println!("lets do something with cat... or something");
 
-    let client = get_rpc_client(Regtest, Auth::None)?;
+    let args = Cli::parse();
+
+    let client = get_rpc_client(&args.network, Auth::UserPass("user".to_string(), "pass".to_string()))?;
+
+    {
+        let wallets = client.list_wallets()?;
+        if !wallets.contains(&"miner".to_string()) {
+            client.load_wallet("miner")?;
+        }
+    }
+
+    let miner_address = client.get_new_address(None, Some(AddressType::Bech32m))?.require_network(args.network)?;
 
     let secp = Secp256k1::new();
 
@@ -39,7 +57,7 @@ fn main() -> Result<()> {
 
     let outputs = TxOut {
         value: Amount::from_sat(amount),
-        script_pubkey: Address::from_str("bcrt1py9ccnmdrk9z4ylvgt68htyazmssvsz0cdzjcm3p3m75dsc0j203q37qzse").expect("address should be valid").assume_checked().script_pubkey(),
+        script_pubkey: miner_address.script_pubkey(),
     };
     let mut encoded_outputs = Vec::new();
     outputs.consensus_encode(&mut encoded_outputs)?;
@@ -63,8 +81,8 @@ fn main() -> Result<()> {
 
     let mut txin = TxIn {
         previous_output: OutPoint {
-            txid: "09b8a8b454687cd16bb318a8f94a849412c733217ba91305a19359c71d68ac68".parse().expect("txid should be valid"),
-            vout: 1,
+            txid: "6b25c93961736c9d75e0cf881a97f970e49a7e9cac7e05d2b2fc6e7f01430f2f".parse().expect("txid should be valid"),
+            vout: 0,
         },
         script_sig: Default::default(),
         sequence: Default::default(),
@@ -103,7 +121,9 @@ fn main() -> Result<()> {
 
         }, &spend_tx, 0, &[txout.clone()], None, TapLeafHash::from_script(&script, LeafVersion::TapScript), TapSighashType::Default)?;
         let schnorr = schnorr_fun::test_instance!();
+        #[allow(non_snake_case)]
         let R = G.into_point_with_even_y().0;
+        #[allow(non_snake_case)]
         let P = G.into_point_with_even_y().0;
         assert_eq!(R, P);
         let sighash_bytes = sighash.clone().into_32();
@@ -249,7 +269,7 @@ fn make_tagged_hash(tag: &[u8], data: &[u8]) -> [u8;32] {
 
 }
 
-fn get_rpc_client(network: Network, auth: Auth) -> Result<Client> {
+fn get_rpc_client(network: &Network, auth: Auth) -> Result<Client> {
     let url = match network {
         Network::Bitcoin => "http://localhost:8332",
         Network::Testnet => "http://localhost:18332",

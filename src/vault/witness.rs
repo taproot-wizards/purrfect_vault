@@ -243,6 +243,7 @@ pub(crate) fn get_sigmsg_components<S: Into<TapLeafHash>>(
     //         ss += struct.pack("<i", codeseparator_pos)
 
     if spec.scriptpath {
+        #[allow(non_snake_case)]
         let KEY_VERSION_0 = 0u8;
 
         if let Some((hash, code_separator_pos)) = leaf_hash_code_separator {
