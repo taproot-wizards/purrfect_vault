@@ -1,9 +1,12 @@
-use bitcoin::{Script, ScriptBuf};
-use bitcoin::opcodes::all::{OP_2DUP, OP_CAT, OP_CHECKSIG, OP_CHECKSIGVERIFY, OP_DUP, OP_EQUAL, OP_EQUALVERIFY, OP_FROMALTSTACK, OP_ROLL, OP_ROT, OP_SHA256, OP_SWAP, OP_TOALTSTACK};
-use lazy_static::lazy_static;
 use crate::G_X;
+use bitcoin::opcodes::all::{
+    OP_2DUP, OP_CAT, OP_CHECKSIG, OP_CHECKSIGVERIFY, OP_DUP, OP_EQUAL, OP_EQUALVERIFY,
+    OP_FROMALTSTACK, OP_ROLL, OP_ROT, OP_SHA256, OP_SWAP, OP_TOALTSTACK,
+};
+use bitcoin::{Script, ScriptBuf};
+use lazy_static::lazy_static;
 
-lazy_static!(
+lazy_static! {
     static ref TAPSIGHASH_TAG: [u8; 10] = {
         let mut tag = [0u8; 10];
         let val = "TapSighash".as_bytes();
@@ -15,21 +18,22 @@ lazy_static!(
         let val = "BIP0340/challenge".as_bytes();
         tag.copy_from_slice(val);
         tag
-        };
-);
+    };
+}
 
 pub(crate) fn hello_world_script() -> ScriptBuf {
-    let hashed_data = hex::decode("936a185caaa266bb9cbe981e9e05cb78cd732b0b3280eb944412bb6f8f8f07af").unwrap();
+    let hashed_data =
+        hex::decode("936a185caaa266bb9cbe981e9e05cb78cd732b0b3280eb944412bb6f8f8f07af").unwrap();
     let hash_bytes: [u8; 32] = hashed_data.try_into().unwrap();
 
     let mut builder = Script::builder();
-    builder = builder.push_opcode(OP_CAT)
+    builder = builder
+        .push_opcode(OP_CAT)
         .push_opcode(OP_SHA256)
         .push_slice(hash_bytes)
         .push_opcode(OP_EQUAL);
     builder.into_script()
 }
-
 
 pub(crate) fn basic_sig_assert() -> ScriptBuf {
     let mut builder = Script::builder();

@@ -1,8 +1,11 @@
 use anyhow::Result;
-use bitcoin::{TapLeafHash, TapSighashType, Transaction, TxOut};
 use bitcoin::consensus::Encodable;
-use bitcoin::hashes::{Hash, sha256};
+use bitcoin::hashes::{sha256, Hash, HashEngine};
+use bitcoin::secp256k1::ThirtyTwoByteHash;
 use bitcoin::sighash::{Annex, Error};
+use bitcoin::{TapLeafHash, TapSighash, TapSighashType, Transaction, TxOut};
+
+use crate::G_X;
 
 #[derive()]
 pub(crate) struct TxCommitmentSpec {
@@ -11,10 +14,10 @@ pub(crate) struct TxCommitmentSpec {
     pub(crate) version: bool,
     pub(crate) lock_time: bool,
     pub(crate) prevouts: bool,
-    pub(crate) prev_amounts:bool,
-    pub(crate) prev_sciptpubkeys:bool,
-    pub(crate) sequences:bool,
-   pub(crate)  outputs: bool,
+    pub(crate) prev_amounts: bool,
+    pub(crate) prev_sciptpubkeys: bool,
+    pub(crate) sequences: bool,
+    pub(crate) outputs: bool,
     pub(crate) spend_type: bool,
     pub(crate) annex: bool,
     pub(crate) single_output: bool,
@@ -48,8 +51,8 @@ pub(crate) fn get_sigmsg_components<S: Into<TapLeafHash>>(
     prevouts: &[TxOut],
     annex: Option<Annex>,
     leaf_hash: S,
-    sighash_type: TapSighashType) -> Result<Vec<Vec<u8>>> {
-
+    sighash_type: TapSighashType,
+) -> Result<Vec<Vec<u8>>> {
     // all this serialization code was lifted from bitcoin-0.31.1/src/crypto/sighash.rs:597 and
     // then very violently hacked up
 
@@ -99,7 +102,10 @@ pub(crate) fn get_sigmsg_components<S: Into<TapLeafHash>>(
             let mut prevouts = Vec::new();
             let mut buffer = Vec::new();
             for prevout in tx.input.iter() {
-                prevout.previous_output.consensus_encode(&mut buffer).unwrap();
+                prevout
+                    .previous_output
+                    .consensus_encode(&mut buffer)
+                    .unwrap();
             }
 
             let hash = sha256::Hash::hash(&buffer);
@@ -166,8 +172,6 @@ pub(crate) fn get_sigmsg_components<S: Into<TapLeafHash>>(
         components.push(encoded_spend_type);
     }
 
-
-
     // TODO: wrap these fields in spec checks. right now we dont use ANYONECANPAY so it doesnt matter
 
     // If hash_type & 0x80 equals SIGHASH_ANYONECANPAY:
@@ -176,15 +180,19 @@ pub(crate) fn get_sigmsg_components<S: Into<TapLeafHash>>(
     //      scriptPubKey (35): scriptPubKey of the previous output spent by this input, serialized as script inside CTxOut. Its size is always 35 bytes.
     //      nSequence (4): nSequence of this input.
     if anyone_can_pay {
-        let txin =
-            &tx.input.get(input_index).ok_or(Error::IndexOutOfInputsBounds {
+        let txin = &tx
+            .input
+            .get(input_index)
+            .ok_or(Error::IndexOutOfInputsBounds {
                 index: input_index,
                 inputs_size: tx.input.len(),
             })?;
-        let previous_output = prevouts.get(input_index).ok_or(Error::IndexOutOfInputsBounds {
-            index: input_index,
-            inputs_size: prevouts.len(),
-        })?;
+        let previous_output = prevouts
+            .get(input_index)
+            .ok_or(Error::IndexOutOfInputsBounds {
+                index: input_index,
+                inputs_size: prevouts.len(),
+            })?;
         let mut prevout = Vec::new();
         txin.previous_output.consensus_encode(&mut prevout)?;
         components.push(prevout);
@@ -192,7 +200,9 @@ pub(crate) fn get_sigmsg_components<S: Into<TapLeafHash>>(
         previous_output.value.consensus_encode(&mut amount)?;
         components.push(amount);
         let mut script_pubkey = Vec::new();
-        previous_output.script_pubkey.consensus_encode(&mut script_pubkey)?;
+        previous_output
+            .script_pubkey
+            .consensus_encode(&mut script_pubkey)?;
         components.push(script_pubkey);
         let mut sequence = Vec::new();
         txin.sequence.consensus_encode(&mut sequence)?;
@@ -202,7 +212,6 @@ pub(crate) fn get_sigmsg_components<S: Into<TapLeafHash>>(
         (input_index as u32).consensus_encode(&mut input_idx)?;
         components.push(input_idx);
     }
-
 
     // If an annex is present (the lowest bit of spend_type is set):
     //      sha_annex (32): the SHA256 of (compact_size(size of annex) || annex), where annex
@@ -221,11 +230,10 @@ pub(crate) fn get_sigmsg_components<S: Into<TapLeafHash>>(
     // * Data about this output:
     // If hash_type & 3 equals SIGHASH_SINGLE:
     //      sha_single_output (32): the SHA256 of the corresponding output in CTxOut format.
-    if spec.single_output &&  sighash == TapSighashType::Single {
+    if spec.single_output && sighash == TapSighashType::Single {
         let mut encoded_single_output = Vec::new();
         let mut enc = sha256::Hash::engine();
-        tx
-            .output
+        tx.output
             .get(input_index)
             .ok_or(Error::SingleWithoutCorrespondingOutput {
                 index: input_index,
@@ -248,7 +256,8 @@ pub(crate) fn get_sigmsg_components<S: Into<TapLeafHash>>(
 
         if let Some((hash, code_separator_pos)) = leaf_hash_code_separator {
             let mut encoded_leaf_hash = Vec::new();
-            hash.as_byte_array().consensus_encode(&mut encoded_leaf_hash)?;
+            hash.as_byte_array()
+                .consensus_encode(&mut encoded_leaf_hash)?;
             components.push(encoded_leaf_hash);
             let mut encoded_leaf_hash = Vec::new();
             KEY_VERSION_0.consensus_encode(&mut encoded_leaf_hash)?;
@@ -259,6 +268,68 @@ pub(crate) fn get_sigmsg_components<S: Into<TapLeafHash>>(
         }
     }
 
-
     Ok(components)
+}
+
+pub(crate) fn compute_signature_from_components(components: &[Vec<u8>]) -> Result<[u8; 64]> {
+    let sigmsg = compute_sigmsg_from_components(components)?;
+    let mut buffer = Vec::new();
+    buffer.append(&mut G_X.to_vec());
+    buffer.append(&mut G_X.to_vec());
+    buffer.append(&mut sigmsg.to_vec());
+    let challenge = make_tagged_hash("BIP0340/challenge".as_bytes(), buffer.as_slice());
+    Ok(make_signature(&challenge))
+}
+
+pub(crate) fn compute_sigmsg_from_components(components: &[Vec<u8>]) -> Result<[u8; 32]> {
+    let mut hashed_tag = sha256::Hash::engine();
+    hashed_tag.input("TapSighash".as_bytes());
+    let hashed_tag = sha256::Hash::from_engine(hashed_tag);
+
+    let mut serialized_tx = sha256::Hash::engine();
+    serialized_tx.input(hashed_tag.as_ref());
+    serialized_tx.input(hashed_tag.as_ref());
+
+    {
+        let tapsighash_engine = TapSighash::engine();
+        assert_eq!(tapsighash_engine.midstate(), serialized_tx.midstate());
+    }
+
+    for component in components.iter() {
+        serialized_tx.input(component.as_slice());
+    }
+
+    let tagged_hash = sha256::Hash::from_engine(serialized_tx);
+    Ok(tagged_hash.into_32())
+}
+
+pub(crate) fn compute_challenge(sigmsg: &[u8; 32]) -> [u8; 32] {
+    let mut buffer = Vec::new();
+    buffer.append(&mut G_X.to_vec());
+    buffer.append(&mut G_X.to_vec());
+    buffer.append(&mut sigmsg.to_vec());
+    make_tagged_hash("BIP0340/challenge".as_bytes(), buffer.as_slice())
+}
+
+fn make_signature(challenge: &[u8; 32]) -> [u8; 64] {
+    let mut signature: [u8; 64] = [0; 64];
+    signature[0..32].copy_from_slice(G_X.as_slice());
+    signature[32..64].copy_from_slice(challenge);
+    signature
+}
+
+fn make_tagged_hash(tag: &[u8], data: &[u8]) -> [u8; 32] {
+    // make a hashed_tag which is sha256(tag)
+    let mut hashed_tag = sha256::Hash::engine();
+    hashed_tag.input(tag);
+    let hashed_tag = sha256::Hash::from_engine(hashed_tag);
+
+    // compute the message to be hashed. It is prefixed with the hashed_tag twice
+    // for example, hashed_tag || hashed_tag || data
+    let mut message = sha256::Hash::engine();
+    message.input(hashed_tag.as_ref());
+    message.input(hashed_tag.as_ref());
+    message.input(data);
+    let message = sha256::Hash::from_engine(message);
+    message.into_32()
 }
