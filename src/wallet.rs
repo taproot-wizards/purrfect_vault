@@ -1,10 +1,8 @@
-use anyhow::Result;
-use bitcoin::absolute::LockTime;
-use bitcoin::transaction::Version;
-use bitcoin::{Address, Amount, Denomination, Network, OutPoint, Transaction, TxOut, Txid};
+use anyhow::{anyhow, Result};
+use bitcoin::{Address, Amount, Network, OutPoint, Transaction, Txid};
+use bitcoincore_rpc::{Client, RawTx, RpcApi};
 use bitcoincore_rpc::jsonrpc::serde_json;
 use bitcoincore_rpc::jsonrpc::serde_json::{json, Value};
-use bitcoincore_rpc::{Client, RawTx, RpcApi};
 use log::info;
 use serde::Deserialize;
 
@@ -88,8 +86,8 @@ impl Wallet {
         let txid = self.client.call(
             "sendrawtransaction",
             &[
-                serde_json::json!(tx.raw_hex()),
-                serde_json::json!(max_fee_rate),
+                json!(tx.raw_hex()),
+                json!(max_fee_rate),
             ],
         )?;
         Ok(txid)
@@ -103,6 +101,7 @@ impl Wallet {
     }
 
     pub(crate) fn mine_blocks(&self, blocks: Option<u64>) -> Result<()> {
+        info!("Mining {} blocks", blocks.unwrap_or(1));
         let address = self.get_new_address()?;
         self.client
             .generate_to_address(blocks.unwrap_or(1), &address)?;
@@ -134,8 +133,13 @@ impl Wallet {
         }
         Ok(OutPoint {
             txid,
-            vout: target_vout as u32,
+            vout: target_vout,
         })
+    }
+
+    pub(crate) fn sign_tx(&self, tx: &Transaction) -> Result<Transaction> {
+        let signed = self.client.sign_raw_transaction_with_wallet(tx, None, None)?;
+        signed.transaction().map_err(|e| anyhow!("signing failed: {}", e))
     }
 }
 

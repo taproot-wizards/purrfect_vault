@@ -2,9 +2,11 @@ use anyhow::Result;
 use bitcoin::{Address, Amount, Network, OutPoint, Script, ScriptBuf, TapLeafHash, TapSighashType, Transaction, TxIn, TxOut, XOnlyPublicKey};
 use bitcoin::absolute::LockTime;
 use bitcoin::consensus::Encodable;
+use bitcoin::hashes::{Hash, sha256};
 use bitcoin::hex::{Case, DisplayHex};
 use bitcoin::key::Secp256k1;
 use bitcoin::opcodes::all::{OP_1SUB, OP_CAT, OP_CHECKSIG, OP_DUP, OP_EQUALVERIFY, OP_FROMALTSTACK, OP_ROT, OP_SHA256, OP_SWAP, OP_TOALTSTACK};
+use bitcoin::secp256k1::ThirtyTwoByteHash;
 use bitcoin::taproot::{LeafVersion, TaprootBuilder, TaprootSpendInfo};
 use bitcoin::transaction::Version;
 use log::debug;
@@ -108,6 +110,7 @@ impl BasicRecursiveCovenant {
     }
 
     fn taproot_spend_info(&self) -> Result<TaprootSpendInfo> {
+        // TODO: change this to the hash of G_X, not G_X itself
         let nums_key = XOnlyPublicKey::from_slice(G_X.as_slice())?;
         let secp = Secp256k1::new();
         Ok(TaprootBuilder::new()
@@ -186,10 +189,6 @@ impl BasicRecursiveCovenant {
         let mut scriptpubkey_buffer = Vec::new();
         output.script_pubkey.consensus_encode(&mut scriptpubkey_buffer)?;
         txin.witness.push(scriptpubkey_buffer.as_slice());
-
-        let mut joint_buffer = Vec::new();
-        amount.consensus_encode(&mut joint_buffer)?;
-        output.script_pubkey.consensus_encode(&mut joint_buffer)?;
 
 
         let mangled_signature: [u8; 63] = computed_signature[0..63].try_into().unwrap(); // chop off the last byte, so we can provide the 0x00 and 0x01 bytes on the stack

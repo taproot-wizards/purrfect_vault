@@ -138,6 +138,7 @@ pub(crate) fn get_sigmsg_components<S: Into<TapLeafHash>>(
             for p in prevouts {
                 p.script_pubkey.consensus_encode(&mut buffer).unwrap();
             }
+            debug!("prev_sciptpubkeys buffer: {:?}", buffer.to_hex_string(Case::Lower));
 
             let hash = sha256::Hash::hash(&buffer);
             hash.consensus_encode(&mut prev_sciptpubkeys).unwrap();
