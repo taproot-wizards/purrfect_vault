@@ -34,6 +34,8 @@ impl Wallet {
             settings.bitcoin_rpc_password.clone(),
         );
 
+        //let auth = bitcoincore_rpc::Auth::CookieFile("/Users/alex/Library/Application Support/Bitcoin/regtest/.cookie".to_string().parse().unwrap());
+
         let client = Client::new(&format!("http://127.0.0.1:{port}"), auth.clone()).unwrap();
         if client
             .list_wallet_dir()

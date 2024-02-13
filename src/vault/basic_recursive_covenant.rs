@@ -1,23 +1,21 @@
 use anyhow::Result;
+use bitcoin::{Address, Amount, Network, OutPoint, Script, ScriptBuf, TapLeafHash, TapSighashType, Transaction, TxIn, TxOut, XOnlyPublicKey};
 use bitcoin::absolute::LockTime;
 use bitcoin::consensus::Encodable;
-use bitcoin::hashes::{Hash, sha256};
 use bitcoin::hex::{Case, DisplayHex};
 use bitcoin::key::Secp256k1;
+use bitcoin::opcodes::all::{OP_1SUB, OP_CAT, OP_CHECKSIG, OP_DUP, OP_EQUALVERIFY, OP_FROMALTSTACK, OP_ROT, OP_SHA256, OP_SWAP, OP_TOALTSTACK};
 use bitcoin::taproot::{LeafVersion, TaprootBuilder, TaprootSpendInfo};
 use bitcoin::transaction::Version;
-use bitcoin::{Address, Amount, Network, OutPoint, Script, ScriptBuf, TapLeafHash, TapSighashType, Transaction, TxIn, TxOut, XOnlyPublicKey};
-use bitcoin::opcodes::all::{OP_CAT, OP_CHECKSIG, OP_DUP, OP_EQUALVERIFY, OP_FROMALTSTACK, OP_ROLL, OP_ROT, OP_SHA256, OP_SWAP, OP_TOALTSTACK};
-use bitcoin::secp256k1::ThirtyTwoByteHash;
 use log::debug;
 
+use crate::G_X;
 use crate::settings::Settings;
 use crate::vault::{contract, signature_building};
+use crate::vault::contract::{BIP0340_CHALLENGE_TAG, TAPSIGHASH_TAG};
 use crate::vault::signature_building::{
     get_sigmsg_components, TxCommitmentSpec,
 };
-use crate::G_X;
-use crate::vault::contract::{BIP0340_CHALLENGE_TAG, TAPSIGHASH_TAG};
 
 pub(crate) struct BasicRecursiveCovenant {
     script: ScriptBuf,
@@ -84,11 +82,11 @@ impl BasicRecursiveCovenant {
             .push_opcode(OP_CAT) // cat the R value with the s value for a complete signature
             .push_opcode(OP_FROMALTSTACK) // grab the pre-computed signature minus the last byte from the alt stack
             .push_opcode(OP_DUP) // we'll need a second copy later to do the actual signature verification
-            .push_int(0x01) // add the last byte of the signature, which should match what we computed
+            .push_slice([0x00u8]) // add the last byte of the signature, which should match what we computed. NOTE ⚠️: push_int(0) will not work here because it will push OP_FALSE, but we want an actual 0 byte
             .push_opcode(OP_CAT)
             .push_opcode(OP_ROT) // bring the script-computed signature to the top of the stack
             .push_opcode(OP_EQUALVERIFY) // check that the script-computed and pre-computed signatures match
-            .push_int(0x02) // we need the last byte of the signature to be 0x02 because our k value is 1 (because K is G)
+            .push_int(0x01) // we need the last byte of the signature to be 0x01 because our k value is 1 (because K is G)
             .push_opcode(OP_CAT)
             .push_slice(*G_X) // push G again. TODO: DUP this from before and stick it in the alt stack or something
             .push_opcode(OP_CHECKSIG);
@@ -157,7 +155,7 @@ impl BasicRecursiveCovenant {
         let leaf_hash = TapLeafHash::from_script(self.script(), LeafVersion::TapScript);
         let contract_components = contract::grind_transaction(
             spend_tx,
-            contract::GrindField::Sequence,
+            contract::GrindField::LockTime,
             &[funding_output.clone()],
             leaf_hash,
         )?;

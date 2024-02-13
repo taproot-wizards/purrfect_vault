@@ -70,8 +70,8 @@ where
         let sigmsg = compute_sigmsg_from_components(&components_for_signature)?;
         let challenge = compute_challenge(&sigmsg);
 
-        if challenge[31] == 0x01 {
-            debug!("Found a challenge with a 1 at the end!");
+        if challenge[31] == 0x00 {
+            debug!("Found a challenge with a 0 at the end!");
             debug!("{:?} is {}", grind_field, counter);
             debug!(
                 "Here's the challenge: {}",
