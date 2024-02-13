@@ -1,5 +1,6 @@
-use bitcoin::{Sequence, TapLeafHash, TapSighashType, Transaction, TxOut};
+use bitcoin::{Amount, Sequence, TapLeafHash, TapSighashType, Transaction, TxOut};
 use bitcoin::absolute::LockTime;
+use bitcoin::consensus::Encodable;
 use bitcoin::hex::{Case, DisplayHex};
 use lazy_static::lazy_static;
 use log::debug;
@@ -17,6 +18,14 @@ lazy_static! {
         let val = "BIP0340/challenge".as_bytes();
         tag.copy_from_slice(val);
         tag
+    };
+    pub(crate) static ref DUST_AMOUNT: [u8; 8] = {
+        let mut dust = [0u8; 8];
+        let mut buffer = Vec::new();
+        let amount = Amount::from_sat(546);
+        amount.consensus_encode(&mut buffer).unwrap();
+        dust.copy_from_slice(&buffer);
+        dust
     };
 }
 

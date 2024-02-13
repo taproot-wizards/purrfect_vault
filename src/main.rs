@@ -50,37 +50,9 @@ fn main() -> Result<()> {
         miner_wallet.mine_blocks(Some(1))?;
     }
 
-    /*
-    println!("Let's make a recursive covenant!");
-    let contract = BasicRecursiveCovenant::new(&settings)?;
-    let funding_utxo = miner_wallet.send(&contract.address()?, Amount::from_sat(100_000_000))?;
-    info!("funding txid: {}", funding_utxo.txid);
-    info!("funding vout: {}", funding_utxo.vout);
-    miner_wallet.mine_blocks(Some(1))?;
-
-    info!("ok, lets spend it");
-
-    let spend_tx = contract.create_spending_transaction(
-        &funding_utxo,
-        TxOut {
-            script_pubkey: contract.address()?.script_pubkey(),
-            value: Amount::from_sat(100_000_000),
-        },
-        Amount::from_sat(99_999_700),
-    )?;
-    let mut serialized_tx = Vec::new();
-    spend_tx.consensus_encode(&mut serialized_tx).unwrap();
-    debug!("serialized tx: {:?}", serialized_tx.raw_hex());
-    let sent_txid = miner_wallet.broadcast_tx(&serialized_tx, None)?;
-    miner_wallet.mine_blocks(Some(1))?;
-    info!("sent txid: {}", sent_txid);
-     */
-
     println!("lets make a vault");
     let mut vault = VaultCovenant::new(&settings)?;
-    let fee_paying_address = fee_wallet.get_new_address()?;
-    let fee_paying_utxo = miner_wallet.send(&fee_paying_address, Amount::from_sat(100_000))?;
-    info!("funding txid: {}", fee_paying_utxo.txid);
+
     info!("depositing into vault");
     let vault_address = vault.address()?;
     let deposit_tx = miner_wallet.send(&vault_address, Amount::from_sat(100_000_000))?;
@@ -89,9 +61,34 @@ fn main() -> Result<()> {
     info!("deposit txid: {}", deposit_tx.txid);
     miner_wallet.mine_blocks(Some(1))?;
 
+    info!("Triggering a withdrawal");
+    let withdrawal_address = fee_wallet.get_new_address()?;
+    let fee_paying_address = fee_wallet.get_new_address()?;
+    let fee_paying_utxo = miner_wallet.send(&fee_paying_address, Amount::from_sat(10_000))?;
+    miner_wallet.mine_blocks(Some(1))?;
+    let trigger_tx = vault.create_trigger_tx(&fee_paying_utxo, TxOut {
+        script_pubkey: fee_paying_address.script_pubkey(),
+        value: Amount::from_sat(10_000),
+    }, &withdrawal_address)?;
+    let signed_tx = fee_wallet.sign_tx(&trigger_tx)?;
+    let mut serialized_tx = Vec::new();
+    signed_tx.consensus_encode(&mut serialized_tx).unwrap();
+    debug!("serialized tx: {:?}", serialized_tx.raw_hex());
+    let txid = fee_wallet.broadcast_tx(&serialized_tx, None)?;
+    info!("sent trigger transaction txid: {}", txid);
+    vault.set_current_outpoint(OutPoint {
+        txid,
+        vout: 0,
+    });
+    miner_wallet.mine_blocks(Some(1))?;
+
+
+    info!("Cancelling the withdrawal");
+    let fee_paying_address = fee_wallet.get_new_address()?;
+    let fee_paying_utxo = miner_wallet.send(&fee_paying_address, Amount::from_sat(10_000))?;
     let cancel_tx = vault.create_cancel_tx(&fee_paying_utxo, TxOut {
         script_pubkey: fee_paying_address.script_pubkey(),
-        value: Amount::from_sat(100_000),
+        value: Amount::from_sat(10_000),
     })?;
 
     let signed_tx = fee_wallet.sign_tx(&cancel_tx)?;

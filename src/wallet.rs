@@ -1,9 +1,8 @@
 use anyhow::{anyhow, Result};
 use bitcoin::{Address, Amount, Network, OutPoint, Transaction, Txid};
 use bitcoincore_rpc::{Client, RawTx, RpcApi};
-use bitcoincore_rpc::jsonrpc::serde_json;
 use bitcoincore_rpc::jsonrpc::serde_json::{json, Value};
-use log::info;
+use log::{debug, info};
 use serde::Deserialize;
 
 use crate::settings::Settings;
@@ -115,14 +114,14 @@ impl Wallet {
 
     pub(crate) fn send(&self, address: &Address, amount: Amount) -> Result<OutPoint> {
         let output = json!([{
-            address.to_string(): amount.to_float_in(Denomination::Bitcoin)
+            address.to_string(): amount.to_float_in(bitcoin::Denomination::Bitcoin)
         }]);
         let send_result: SendResult = self
             .client
             .call("send", &[output, Value::Null, "unset".into(), 1.into()])?;
         let txid = send_result.txid;
 
-        info!("sent txid: {}", txid);
+        debug!("sent txid: {}", txid);
         let transaction_info = self.client.get_transaction(&txid, None)?;
         let mut target_vout = 0;
         for (i, details) in transaction_info.details.iter().enumerate() {
