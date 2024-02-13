@@ -98,6 +98,7 @@ impl SingleOutputEncumberingContract {
         let leaf_hash = TapLeafHash::from_script(self.script(), LeafVersion::TapScript);
         let contract_components = contract::grind_transaction(
             spend_tx,
+            contract::GrindField::LockTime,
             &[funding_output.clone()],
             leaf_hash,
         )?;

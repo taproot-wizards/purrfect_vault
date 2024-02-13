@@ -1,4 +1,4 @@
-use bitcoin::{TapLeafHash, TapSighashType, Transaction, TxOut};
+use bitcoin::{Sequence, TapLeafHash, TapSighashType, Transaction, TxOut};
 use bitcoin::absolute::LockTime;
 use bitcoin::hex::{Case, DisplayHex};
 use lazy_static::lazy_static;
@@ -25,8 +25,15 @@ pub(crate) struct ContractComponents {
     pub(crate) signature_components: Vec<Vec<u8>>,
 }
 
+#[derive(Debug)]
+pub(crate) enum GrindField {
+    LockTime,
+    Sequence,
+}
+
 pub(crate) fn grind_transaction<S>(
     initial_tx: Transaction,
+    grind_field: GrindField,
     prevouts: &[TxOut],
     leaf_hash: S,
 ) -> anyhow::Result<ContractComponents>
@@ -34,13 +41,22 @@ where
     S: Into<TapLeafHash> + Clone,
 {
     let signature_components: Vec<Vec<u8>>;
-    let mut locktime = 0;
+    let mut counter = 0;
 
     let mut spend_tx = initial_tx.clone();
 
     loop {
-        spend_tx.lock_time = LockTime::from_height(locktime)?;
-        debug!("grinding locktime {}", locktime);
+        match grind_field {
+            GrindField::LockTime => spend_tx.lock_time = LockTime::from_height(counter)?,
+            GrindField::Sequence => {
+                // make sure counter has the 31st bit set, so that it's not used as a relative timelock
+                // (BIP68 tells us that bit disables the consensus meaning of sequence numbers for RTL)
+                counter |= 1 << 31;
+                // set the sequence number of the last input to the counter, we'll use that to pay fees if there is more than one input
+                spend_tx.input.last_mut().unwrap().sequence = Sequence::from_consensus(counter);
+            }
+        }
+        debug!("grinding counter {}", counter);
 
         let components_for_signature = get_sigmsg_components(
             &TxCommitmentSpec::default(),
@@ -56,7 +72,7 @@ where
 
         if challenge[31] == 0x01 {
             debug!("Found a challenge with a 1 at the end!");
-            debug!("locktime is {}", locktime);
+            debug!("{:?} is {}", grind_field, counter);
             debug!(
                 "Here's the challenge: {}",
                 challenge.to_hex_string(Case::Lower)
@@ -64,7 +80,7 @@ where
             signature_components = components_for_signature;
             break;
         }
-        locktime += 1;
+        counter += 1;
     }
     Ok(ContractComponents {
         transaction: spend_tx,
