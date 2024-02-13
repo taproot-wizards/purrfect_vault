@@ -4,6 +4,8 @@ use bitcoin::hashes::{sha256, Hash, HashEngine};
 use bitcoin::secp256k1::ThirtyTwoByteHash;
 use bitcoin::sighash::{Annex, Error};
 use bitcoin::{TapLeafHash, TapSighash, TapSighashType, Transaction, TxOut};
+use bitcoin::hex::{Case, DisplayHex};
+use log::debug;
 
 use crate::G_X;
 
@@ -282,6 +284,7 @@ pub(crate) fn compute_signature_from_components(components: &[Vec<u8>]) -> Resul
 }
 
 pub(crate) fn compute_sigmsg_from_components(components: &[Vec<u8>]) -> Result<[u8; 32]> {
+    debug!("creating sigmsg from components",);
     let mut hashed_tag = sha256::Hash::engine();
     hashed_tag.input("TapSighash".as_bytes());
     let hashed_tag = sha256::Hash::from_engine(hashed_tag);
@@ -296,6 +299,7 @@ pub(crate) fn compute_sigmsg_from_components(components: &[Vec<u8>]) -> Result<[
     }
 
     for component in components.iter() {
+        debug!("adding component: {:?}", component.to_hex_string(Case::Lower));
         serialized_tx.input(component.as_slice());
     }
 

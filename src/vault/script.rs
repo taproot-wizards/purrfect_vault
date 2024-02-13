@@ -4,22 +4,8 @@ use bitcoin::opcodes::all::{
     OP_FROMALTSTACK, OP_ROLL, OP_ROT, OP_SHA256, OP_SWAP, OP_TOALTSTACK,
 };
 use bitcoin::{Script, ScriptBuf};
+use crate::vault::contract::{BIP0340_CHALLENGE_TAG, TAPSIGHASH_TAG};
 use lazy_static::lazy_static;
-
-lazy_static! {
-    static ref TAPSIGHASH_TAG: [u8; 10] = {
-        let mut tag = [0u8; 10];
-        let val = "TapSighash".as_bytes();
-        tag.copy_from_slice(val);
-        tag
-    };
-    static ref BIP0340_CHALLENGE_TAG: [u8; 17] = {
-        let mut tag = [0u8; 17];
-        let val = "BIP0340/challenge".as_bytes();
-        tag.copy_from_slice(val);
-        tag
-    };
-}
 
 pub(crate) fn hello_world_script() -> ScriptBuf {
     let hashed_data =
@@ -54,19 +40,20 @@ pub(crate) fn assemble_whole_sig() -> ScriptBuf {
     let mut builder = Script::builder();
     builder = builder
         .push_opcode(OP_TOALTSTACK) // move pre-computed signature minus last byte to alt stack
-        .push_opcode(OP_CAT)
-        .push_opcode(OP_CAT)
-        .push_opcode(OP_CAT)
-        .push_opcode(OP_CAT)
-        .push_opcode(OP_CAT)
-        .push_opcode(OP_CAT)
-        .push_opcode(OP_CAT)
-        .push_opcode(OP_CAT)
-        .push_opcode(OP_CAT)
-        .push_opcode(OP_CAT)
-        .push_opcode(OP_CAT)
-        .push_opcode(OP_CAT)
-        .push_opcode(OP_CAT) // cat all the things
+        // start with encoded leaf hash
+        .push_opcode(OP_CAT) // encoded leaf hash
+        .push_opcode(OP_CAT) // encoded leaf hash
+        .push_opcode(OP_CAT) // input index
+        .push_opcode(OP_CAT) // spend type
+        .push_opcode(OP_CAT) // outputs
+        .push_opcode(OP_CAT) // prev sequences
+        .push_opcode(OP_CAT) // prev scriptpubkeys
+        .push_opcode(OP_CAT) // prev amounts
+        .push_opcode(OP_CAT) // prevouts
+        .push_opcode(OP_CAT) // lock time
+        .push_opcode(OP_CAT) // version
+        .push_opcode(OP_CAT) // control
+        .push_opcode(OP_CAT) // epoch
         .push_slice(*TAPSIGHASH_TAG) // push tag
         .push_opcode(OP_SHA256) // hash tag
         .push_opcode(OP_DUP) // dup hash

@@ -10,6 +10,7 @@ use log::{debug, info};
 use secp256kfun::G;
 
 use crate::settings::Settings;
+use crate::vault::basic_recursive_covenant::BasicRecursiveCovenant;
 use crate::wallet::Wallet;
 
 mod settings;
@@ -43,7 +44,8 @@ fn main() -> Result<()> {
 
     let miner_address = miner_wallet.get_new_address()?;
 
-    let contract = vault::contract::SingleOutputEncumberingContract::new(
+    /*
+    let contract = vault::single_output_constraint_contract::SingleOutputEncumberingContract::new(
         &miner_address,
         Amount::from_sat(99_000_000),
         &settings,
@@ -70,6 +72,33 @@ fn main() -> Result<()> {
     let sent_txid = miner_wallet.broadcast_tx(&serialized_tx, None)?;
     miner_wallet.mine_blocks(Some(1))?;
     info!("sent txid: {}", sent_txid);
+
+    */
+
+    println!("Let's make a recursive covenant!");
+    let contract = BasicRecursiveCovenant::new(&settings)?;
+    let funding_utxo = miner_wallet.send(&contract.address()?, Amount::from_sat(100_000_000))?;
+    info!("funding txid: {}", funding_utxo.txid);
+    info!("funding vout: {}", funding_utxo.vout);
+    miner_wallet.mine_blocks(Some(1))?;
+
+    info!("ok, lets spend it");
+
+    let spend_tx = contract.create_spending_transaction(
+        &funding_utxo,
+        TxOut {
+            script_pubkey: contract.address()?.script_pubkey(),
+            value: Amount::from_sat(100_000_000),
+        },
+        Amount::from_sat(99_000_000),
+    )?;
+    let mut serialized_tx = Vec::new();
+    spend_tx.consensus_encode(&mut serialized_tx).unwrap();
+    debug!("serialized tx: {:?}", serialized_tx.raw_hex());
+    let sent_txid = miner_wallet.broadcast_tx(&serialized_tx, None)?;
+    miner_wallet.mine_blocks(Some(1))?;
+    info!("sent txid: {}", sent_txid);
+
 
     Ok(())
 }
