@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use anyhow::Result;
 use bitcoin::consensus::Encodable;
-use bitcoin::{Amount, TxOut};
+use bitcoin::{Amount, OutPoint, TxOut};
 use bitcoincore_rpc::RawTx;
 use clap::Parser;
 use lazy_static::lazy_static;
@@ -90,7 +90,7 @@ fn main() -> Result<()> {
             script_pubkey: contract.address()?.script_pubkey(),
             value: Amount::from_sat(100_000_000),
         },
-        Amount::from_sat(99_000_000),
+        Amount::from_sat(99_999_700),
     )?;
     let mut serialized_tx = Vec::new();
     spend_tx.consensus_encode(&mut serialized_tx).unwrap();
@@ -99,6 +99,25 @@ fn main() -> Result<()> {
     miner_wallet.mine_blocks(Some(1))?;
     info!("sent txid: {}", sent_txid);
 
+    info!("Let's spend it again!");
+    let funding_utxo = OutPoint {
+        txid: sent_txid,
+        vout: 0,
+    };
+    let spend_tx = contract.create_spending_transaction(
+        &funding_utxo,
+        TxOut {
+            script_pubkey: contract.address()?.script_pubkey(),
+            value: Amount::from_sat(99_999_700),
+        },
+        Amount::from_sat(99_999_400),
+    )?;
+    let mut serialized_tx = Vec::new();
+    spend_tx.consensus_encode(&mut serialized_tx).unwrap();
+    debug!("serialized tx: {:?}", serialized_tx.raw_hex());
+    let sent_txid = miner_wallet.broadcast_tx(&serialized_tx, None)?;
+    miner_wallet.mine_blocks(Some(1))?;
+    info!("sent txid: {}", sent_txid);
 
     Ok(())
 }

@@ -73,8 +73,7 @@ impl BasicRecursiveCovenant {
             .push_opcode(OP_DUP)
             .push_opcode(OP_DUP)
             .push_opcode(OP_TOALTSTACK) // we'll need a copy of G later to be our R value in the signature
-            .push_int(0x02)
-            .push_opcode(OP_ROLL) // bring the challenge to the top of the stack
+            .push_opcode(OP_ROT) // bring the challenge to the top of the stack
             .push_opcode(OP_CAT)
             .push_opcode(OP_CAT)
             .push_opcode(OP_CAT)
