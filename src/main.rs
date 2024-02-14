@@ -83,6 +83,27 @@ fn main() -> Result<()> {
     miner_wallet.mine_blocks(Some(1))?;
 
 
+    info!("Completing the withdrawal");
+
+    let fee_paying_address = fee_wallet.get_new_address()?;
+    let fee_paying_utxo = miner_wallet.send(&fee_paying_address, Amount::from_sat(10_000))?;
+    info!("need to mine 2 blocks");
+    miner_wallet.mine_blocks(Some(2))?;
+    let compete_tx = vault.create_complete_tx(&fee_paying_utxo, TxOut {
+        script_pubkey: fee_paying_address.script_pubkey(),
+        value: Amount::from_sat(10_000),
+    },
+    &withdrawal_address,
+    &trigger_tx)?;
+    let signed_tx = fee_wallet.sign_tx(&compete_tx)?;
+    let mut serialized_tx = Vec::new();
+    signed_tx.consensus_encode(&mut serialized_tx).unwrap();
+    debug!("serialized tx: {:?}", serialized_tx.raw_hex());
+    let txid = fee_wallet.broadcast_tx(&serialized_tx, None)?;
+    info!("sent txid: {}", txid);
+    miner_wallet.mine_blocks(Some(1))?;
+
+/*
     info!("Cancelling the withdrawal");
     let fee_paying_address = fee_wallet.get_new_address()?;
     let fee_paying_utxo = miner_wallet.send(&fee_paying_address, Amount::from_sat(10_000))?;
@@ -98,5 +119,8 @@ fn main() -> Result<()> {
     let txid = fee_wallet.broadcast_tx(&serialized_tx, None)?;
     info!("sent txid: {}", txid);
     miner_wallet.mine_blocks(Some(1))?;
+
+ */
+
     Ok(())
 }
