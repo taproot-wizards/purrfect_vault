@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+use std::str::FromStr;
 use anyhow::{anyhow, Result};
 use bitcoin::{Address, Amount, Network, OutPoint, Sequence, TapLeafHash, TapSighashType, Transaction, TxIn, TxOut, XOnlyPublicKey};
 use bitcoin::absolute::LockTime;
@@ -8,7 +10,8 @@ use bitcoin::key::Secp256k1;
 use bitcoin::secp256k1::ThirtyTwoByteHash;
 use bitcoin::taproot::{LeafVersion, TaprootBuilder, TaprootSpendInfo};
 use bitcoin::transaction::Version;
-use log::debug;
+use bitcoincore_rpc::jsonrpc::serde_json;
+use log::{debug, info};
 use secp256kfun::{G, Point};
 use secp256kfun::marker::{EvenY, NonZero, Public};
 use serde::{Deserialize, Serialize};
@@ -25,7 +28,9 @@ pub(crate) struct VaultCovenant {
     current_outpoint: Option<OutPoint>,
     amount: Amount,
     network: Network,
-    timelock_in_blocks: u16,
+    pub(crate) timelock_in_blocks: u16,
+    withdrawal_address: Option<String>,
+    trigger_transaction: Option<Transaction>,
 }
 
 impl Default for VaultCovenant {
@@ -35,6 +40,8 @@ impl Default for VaultCovenant {
             amount: Amount::ZERO,
             network: Network::Regtest,
             timelock_in_blocks: 20,
+            withdrawal_address: None,
+            trigger_transaction: None,
         }
     }
 }
@@ -48,11 +55,45 @@ impl VaultCovenant {
         })
     }
 
+    pub(crate) fn from_file(filename: &Option<String>) -> Result<Self> {
+        let filename = filename.clone().unwrap_or("vault_covenant.json".to_string());
+        info!("reading vault covenant from file: {}", filename);
+        let file = std::fs::File::open(filename)?;
+        let covenant: VaultCovenant = serde_json::from_reader(file)?;
+        Ok(covenant)
+    }
+
+    pub(crate) fn to_file(&self, filename: &Option<String>) -> Result<()> {
+        let filename = filename.clone().unwrap_or("vault_covenant.json".to_string());
+        info!("writing vault covenant to file: {}", filename);
+        let file = std::fs::File::create(filename)?;
+        serde_json::to_writer(file, self)?;
+        Ok(())
+    }
+
     pub(crate) fn set_current_outpoint(&mut self, outpoint: OutPoint) {
         self.current_outpoint = Some(outpoint);
     }
     pub(crate) fn set_amount(&mut self, amount: Amount) {
         self.amount = amount;
+    }
+
+    pub(crate) fn set_withdrawal_address(&mut self, address: Option<Address>) {
+        self.withdrawal_address = address.map(|a| a.to_string());
+    }
+
+    pub(crate) fn get_withdrawal_address(&self) -> Result<Address> {
+        Ok(
+            Address::from_str(&self.withdrawal_address.as_ref().ok_or(anyhow!("no withdrawal address"))?)?.require_network(self.network)?
+        )
+    }
+
+    pub(crate) fn set_trigger_transaction(&mut self, txn: Option<Transaction>) {
+        self.trigger_transaction = txn;
+    }
+
+    pub(crate) fn get_trigger_transaction(&self) -> Result<Transaction> {
+        Ok(self.trigger_transaction.clone().ok_or(anyhow!("no trigger transaction"))?)
     }
 
     pub(crate) fn address(&self) -> Result<Address> {

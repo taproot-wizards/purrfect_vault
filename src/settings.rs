@@ -12,6 +12,7 @@ pub(crate) struct Settings {
     pub create_wallets: bool,
     pub miner_wallet_name: String,
     pub fee_wallet_name: String,
+    pub vault_file: Option<String>,
 }
 
 impl Default for Settings {
@@ -23,6 +24,7 @@ impl Default for Settings {
             create_wallets: false,
             miner_wallet_name: "miner".to_string(),
             fee_wallet_name: "fee_payment".to_string(),
+            vault_file: None,
         }
     }
 }
