@@ -98,7 +98,7 @@ impl VaultCovenant {
     }
 
     pub(crate) fn get_current_outpoint(&self) -> Result<OutPoint> {
-        Ok(self.current_outpoint.ok_or(anyhow!("no current outpoint"))?)
+        self.current_outpoint.ok_or(anyhow!("no current outpoint"))
     }
     pub(crate) fn set_amount(&mut self, amount: Amount) {
         self.amount = amount;
@@ -110,7 +110,7 @@ impl VaultCovenant {
 
     pub(crate) fn get_withdrawal_address(&self) -> Result<Address> {
         Ok(
-            Address::from_str(&self.withdrawal_address.as_ref().ok_or(anyhow!("no withdrawal address"))?)?.require_network(self.network)?
+            Address::from_str(self.withdrawal_address.as_ref().ok_or(anyhow!("no withdrawal address"))?)?.require_network(self.network)?
         )
     }
 
@@ -119,7 +119,7 @@ impl VaultCovenant {
     }
 
     pub(crate) fn get_trigger_transaction(&self) -> Result<Transaction> {
-        Ok(self.trigger_transaction.clone().ok_or(anyhow!("no trigger transaction"))?)
+        self.trigger_transaction.clone().ok_or(anyhow!("no trigger transaction"))
     }
 
     pub(crate) fn set_state(&mut self, state: VaultState) {
