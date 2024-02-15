@@ -1,8 +1,8 @@
 use bitcoin::{Script, ScriptBuf, Sequence};
 use bitcoin::opcodes::all::{OP_2DUP, OP_CAT, OP_CHECKSIG, OP_CSV, OP_DROP, OP_DUP, OP_EQUALVERIFY, OP_FROMALTSTACK, OP_HASH256, OP_ROT, OP_SHA256, OP_SWAP, OP_TOALTSTACK};
 use bitcoin::script::Builder;
+use crate::vault::signature_building::{BIP0340_CHALLENGE_TAG, DUST_AMOUNT, G_X, TAPSIGHASH_TAG};
 
-use crate::vault::contract::{BIP0340_CHALLENGE_TAG, DUST_AMOUNT, G_X, TAPSIGHASH_TAG};
 
 pub(crate) fn vault_trigger_withdrawal() -> ScriptBuf {
     let mut builder = Script::builder();

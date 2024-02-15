@@ -9,7 +9,7 @@ use clap::Parser;
 use log::{debug, info};
 
 use crate::settings::Settings;
-use crate::vault::vault_contract::VaultCovenant;
+use crate::vault::contract::VaultCovenant;
 use crate::wallet::Wallet;
 
 mod settings;
