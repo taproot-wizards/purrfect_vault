@@ -22,6 +22,27 @@ use crate::vault::signature_building::{
     get_sigmsg_components, TxCommitmentSpec,
 };
 
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
+pub(crate) enum VaultState {
+    Inactive,
+    Triggered,
+    Completed
+}
+
+/// Get the vault state from the transaction and the vault address
+impl From<(Transaction, Address)> for VaultState {
+    fn from(spec: (Transaction, Address)) -> Self {
+        let (tx, address) = spec;
+        if tx.output.len() == 2 && tx.output.get(1).unwrap().value == Amount::from_sat(546) {
+            VaultState::Triggered
+        } else if tx.output.len() == 1 && tx.output.first().unwrap().script_pubkey != address.script_pubkey() {
+            VaultState::Completed
+        } else {
+            VaultState::Inactive
+        }
+    }
+}
+
 #[derive(Serialize, Deserialize)]
 pub(crate) struct VaultCovenant {
     current_outpoint: Option<OutPoint>,
@@ -30,6 +51,7 @@ pub(crate) struct VaultCovenant {
     pub(crate) timelock_in_blocks: u16,
     withdrawal_address: Option<String>,
     trigger_transaction: Option<Transaction>,
+    state: VaultState,
 }
 
 impl Default for VaultCovenant {
@@ -41,6 +63,7 @@ impl Default for VaultCovenant {
             timelock_in_blocks: 20,
             withdrawal_address: None,
             trigger_transaction: None,
+            state: VaultState::Inactive,
         }
     }
 }
@@ -73,6 +96,10 @@ impl VaultCovenant {
     pub(crate) fn set_current_outpoint(&mut self, outpoint: OutPoint) {
         self.current_outpoint = Some(outpoint);
     }
+
+    pub(crate) fn get_current_outpoint(&self) -> Result<OutPoint> {
+        Ok(self.current_outpoint.ok_or(anyhow!("no current outpoint"))?)
+    }
     pub(crate) fn set_amount(&mut self, amount: Amount) {
         self.amount = amount;
     }
@@ -93,6 +120,18 @@ impl VaultCovenant {
 
     pub(crate) fn get_trigger_transaction(&self) -> Result<Transaction> {
         Ok(self.trigger_transaction.clone().ok_or(anyhow!("no trigger transaction"))?)
+    }
+
+    pub(crate) fn set_state(&mut self, state: VaultState) {
+        if state == VaultState::Completed {
+            self.set_trigger_transaction(None);
+            self.set_withdrawal_address(None);
+        }
+        self.state = state;
+    }
+
+    pub(crate) fn get_state(&self) -> VaultState {
+        self.state.clone()
     }
 
     pub(crate) fn address(&self) -> Result<Address> {

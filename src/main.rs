@@ -4,12 +4,13 @@ use std::str::FromStr;
 use anyhow::Result;
 use bitcoin::{Address, Amount, OutPoint, TxOut};
 use bitcoin::consensus::Encodable;
-use bitcoincore_rpc::RawTx;
+use bitcoincore_rpc::{RawTx, RpcApi};
 use clap::Parser;
-use log::{debug, info};
+use log::{debug, error, info};
 
 use crate::settings::Settings;
-use crate::vault::contract::VaultCovenant;
+use crate::vault::contract::{VaultCovenant, VaultState};
+use crate::vault::contract::VaultState::{Completed, Inactive, Triggered};
 use crate::wallet::Wallet;
 
 mod settings;
@@ -56,7 +57,24 @@ fn main() -> Result<()> {
 }
 
 fn status(settings: &Settings) -> Result<()> {
-    todo!()
+    let vault = VaultCovenant::from_file(&settings.vault_file).map_err(|e| {
+        error!("No vault found: {}.", e);
+        error!("You can create a vault with the deposit command.");
+        e
+    })?;
+    let client = Wallet::create_rpc_client(settings, None);
+    let latest_vault_transaction = client.get_raw_transaction(&vault.get_current_outpoint()?.txid, None)?;
+    let latest_state_onchain: VaultState = (latest_vault_transaction, vault.address()?).into();
+    if latest_state_onchain == vault.get_state() {
+        info!("Vault state is consistent with the latest on-chain transaction: {:?}", latest_state_onchain);
+    } else if latest_state_onchain == Triggered {
+        error!("Onchain state is Triggered, but the internal vault state is not. You can MIGHT BE GETTING ROBBED! Run the `cancel` command to cancel the withdrawal and SAVE YOUR MONEY!");
+    } else if vault.get_state() == Completed {
+        info!("Vault state is Completed. This is expected after a successful withdrawal.");
+    } else {
+        error!("Vault state is inconsistent with the latest on-chain transaction: {:?}", latest_state_onchain);
+    }
+    Ok(())
 }
 
 fn cancel(settings: &Settings) -> Result<()> {
@@ -83,6 +101,7 @@ fn cancel(settings: &Settings) -> Result<()> {
         txid,
         vout: 0,
     });
+    vault.set_state(Inactive);
     vault.to_file(&settings.vault_file)?;
 
     Ok(())
@@ -120,8 +139,7 @@ fn complete(settings: &Settings) -> Result<()> {
             vout: 0,
         }
     );
-    vault.set_trigger_transaction(None);
-    vault.set_withdrawal_address(None);
+    vault.set_state(Completed);
     vault.to_file(&settings.vault_file)?;
 
     Ok(())
@@ -157,6 +175,7 @@ fn trigger(destination: &str, steal: bool, settings: &Settings) -> Result<()> {
     if !steal {
         vault.set_withdrawal_address(Some(withdrawal_address));
         vault.set_trigger_transaction(Some(trigger_tx));
+        vault.set_state(Triggered);
     }
     vault.to_file(&settings.vault_file)?;
 

@@ -1,6 +1,6 @@
 use anyhow::{anyhow, Result};
 use bitcoin::{Address, Amount, Network, OutPoint, Transaction, Txid};
-use bitcoincore_rpc::{Client, RawTx, RpcApi};
+use bitcoincore_rpc::{Auth, Client, RawTx, RpcApi};
 use bitcoincore_rpc::jsonrpc::serde_json::{json, Value};
 use log::{debug, info};
 use serde::Deserialize;
@@ -15,24 +15,8 @@ pub(crate) struct Wallet {
 impl Wallet {
     pub(crate) fn new(name: &str, settings: &Settings) -> Self {
         let name = name.to_string();
-        let port = match settings.network {
-            Network::Bitcoin => 8332,
-            Network::Testnet => 18332,
-            Network::Regtest => 18443,
-            Network::Signet => 38332,
-            _ => {
-                unreachable!("unsupported network")
-            }
-        };
-        // TODO: allow for other authentication
-        let auth = bitcoincore_rpc::Auth::UserPass(
-            settings.bitcoin_rpc_username.clone(),
-            settings.bitcoin_rpc_password.clone(),
-        );
 
-        //let auth = bitcoincore_rpc::Auth::CookieFile("/Users/alex/Library/Application Support/Bitcoin/regtest/.cookie".to_string().parse().unwrap());
-
-        let client = Client::new(&format!("http://127.0.0.1:{port}"), auth.clone()).unwrap();
+        let client = Self::create_rpc_client(settings, None);
         if client
             .list_wallet_dir()
             .expect("Could not list wallet dir")
@@ -61,11 +45,36 @@ impl Wallet {
                 .expect("Could not create wallet");
         }
 
-        let url = format!("http://127.0.0.1:{}/wallet/{name}", port);
         Wallet {
-            client: Client::new(&url, auth).unwrap(),
+            client: Self::create_rpc_client(settings, Some(&name)),
             network: settings.network,
         }
+    }
+
+    pub(crate) fn create_rpc_client(settings: &Settings, wallet_name: Option<&str>) -> Client {
+        let port = match settings.network {
+            Network::Bitcoin => 8332,
+            Network::Testnet => 18332,
+            Network::Regtest => 18443,
+            Network::Signet => 38332,
+            _ => {
+                unreachable!("unsupported network")
+            }
+        };
+        // TODO: allow for other authentication
+        let auth = Auth::UserPass(
+            settings.bitcoin_rpc_username.clone(),
+            settings.bitcoin_rpc_password.clone(),
+        );
+
+        //let auth = bitcoincore_rpc::Auth::CookieFile("/Users/alex/Library/Application Support/Bitcoin/regtest/.cookie".to_string().parse().unwrap());
+
+        let url = match wallet_name {
+            None => format!("http://127.0.0.1:{port}"),
+            Some(name) => format!("http://127.0.0.1:{}/wallet/{name}", port)
+        };
+
+        Client::new(&url, auth.clone()).unwrap()
     }
 
     /// broadcast a raw bitcoin transaction (needs to already be network serialized)
