@@ -1,7 +1,7 @@
 use anyhow::{anyhow, Result};
 use bitcoin::{Address, Amount, Network, OutPoint, Transaction, Txid};
-use bitcoincore_rpc::{Auth, Client, RawTx, RpcApi};
 use bitcoincore_rpc::jsonrpc::serde_json::{json, Value};
+use bitcoincore_rpc::{Auth, Client, RawTx, RpcApi};
 use log::{debug, info};
 use serde::Deserialize;
 
@@ -71,7 +71,7 @@ impl Wallet {
 
         let url = match wallet_name {
             None => format!("http://127.0.0.1:{port}"),
-            Some(name) => format!("http://127.0.0.1:{}/wallet/{name}", port)
+            Some(name) => format!("http://127.0.0.1:{}/wallet/{name}", port),
         };
 
         Client::new(&url, auth.clone()).unwrap()
@@ -91,10 +91,7 @@ impl Wallet {
         };
         let txid = self.client.call(
             "sendrawtransaction",
-            &[
-                json!(tx.raw_hex()),
-                json!(max_fee_rate),
-            ],
+            &[json!(tx.raw_hex()), json!(max_fee_rate)],
         )?;
         Ok(txid)
     }
@@ -144,8 +141,12 @@ impl Wallet {
     }
 
     pub(crate) fn sign_tx(&self, tx: &Transaction) -> Result<Transaction> {
-        let signed = self.client.sign_raw_transaction_with_wallet(tx, None, None)?;
-        signed.transaction().map_err(|e| anyhow!("signing failed: {}", e))
+        let signed = self
+            .client
+            .sign_raw_transaction_with_wallet(tx, None, None)?;
+        signed
+            .transaction()
+            .map_err(|e| anyhow!("signing failed: {}", e))
     }
 }
 

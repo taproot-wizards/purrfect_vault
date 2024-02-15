@@ -2,21 +2,20 @@ use std::path::PathBuf;
 use std::str::FromStr;
 
 use anyhow::Result;
-use bitcoin::{Address, Amount, OutPoint, TxOut};
 use bitcoin::consensus::Encodable;
+use bitcoin::{Address, Amount, OutPoint, TxOut};
 use bitcoincore_rpc::{RawTx, RpcApi};
 use clap::Parser;
 use log::{debug, error, info};
 
 use crate::settings::Settings;
-use crate::vault::contract::{VaultCovenant, VaultState};
 use crate::vault::contract::VaultState::{Completed, Inactive, Triggered};
+use crate::vault::contract::{VaultCovenant, VaultState};
 use crate::wallet::Wallet;
 
 mod settings;
 mod vault;
 mod wallet;
-
 
 #[derive(Parser)]
 struct Cli {
@@ -48,7 +47,10 @@ fn main() -> Result<()> {
         Ok(settings) => settings,
         Err(e) => {
             error!("Error reading settings file: {}", e);
-            info!("Creating a new settings file at {}", args.settings_file.display());
+            info!(
+                "Creating a new settings file at {}",
+                args.settings_file.display()
+            );
             let settings = Settings::default();
             settings.to_toml_file(&args.settings_file)?;
             settings
@@ -73,16 +75,23 @@ fn status(settings: &Settings) -> Result<()> {
         e
     })?;
     let client = Wallet::create_rpc_client(settings, None);
-    let latest_vault_transaction = client.get_raw_transaction(&vault.get_current_outpoint()?.txid, None)?;
+    let latest_vault_transaction =
+        client.get_raw_transaction(&vault.get_current_outpoint()?.txid, None)?;
     let latest_state_onchain: VaultState = (latest_vault_transaction, vault.address()?).into();
     if latest_state_onchain == vault.get_state() {
-        info!("Vault state is consistent with the latest on-chain transaction: {:?}", latest_state_onchain);
+        info!(
+            "Vault state is consistent with the latest on-chain transaction: {:?}",
+            latest_state_onchain
+        );
     } else if latest_state_onchain == Triggered {
         error!("Onchain state is Triggered, but the internal vault state is not. You can MIGHT BE GETTING ROBBED! Run the `cancel` command to cancel the withdrawal and SAVE YOUR MONEY!");
     } else if vault.get_state() == Completed {
         info!("Vault state is Completed. This is expected after a successful withdrawal.");
     } else {
-        error!("Vault state is inconsistent with the latest on-chain transaction: {:?}", latest_state_onchain);
+        error!(
+            "Vault state is inconsistent with the latest on-chain transaction: {:?}",
+            latest_state_onchain
+        );
     }
     Ok(())
 }
@@ -95,10 +104,13 @@ fn cancel(settings: &Settings) -> Result<()> {
 
     let fee_paying_address = fee_wallet.get_new_address()?;
     let fee_paying_utxo = miner_wallet.send(&fee_paying_address, Amount::from_sat(10_000))?;
-    let cancel_tx = vault.create_cancel_tx(&fee_paying_utxo, TxOut {
-        script_pubkey: fee_paying_address.script_pubkey(),
-        value: Amount::from_sat(10_000),
-    })?;
+    let cancel_tx = vault.create_cancel_tx(
+        &fee_paying_utxo,
+        TxOut {
+            script_pubkey: fee_paying_address.script_pubkey(),
+            value: Amount::from_sat(10_000),
+        },
+    )?;
 
     let signed_tx = fee_wallet.sign_tx(&cancel_tx)?;
     let mut serialized_tx = Vec::new();
@@ -107,10 +119,7 @@ fn cancel(settings: &Settings) -> Result<()> {
     let txid = fee_wallet.broadcast_tx(&serialized_tx, None)?;
     info!("sent txid: {}", txid);
     miner_wallet.mine_blocks(Some(1))?;
-    vault.set_current_outpoint(OutPoint {
-        txid,
-        vout: 0,
-    });
+    vault.set_current_outpoint(OutPoint { txid, vout: 0 });
     vault.set_state(Inactive);
     vault.to_file(&settings.vault_file)?;
 
@@ -130,12 +139,15 @@ fn complete(settings: &Settings) -> Result<()> {
     let fee_paying_utxo = miner_wallet.send(&fee_paying_address, Amount::from_sat(10_000))?;
     info!("need to mine {timelock_in_blocks} blocks for the timelock");
     miner_wallet.mine_blocks(Some(timelock_in_blocks as u64))?;
-    let compete_tx = vault.create_complete_tx(&fee_paying_utxo, TxOut {
-        script_pubkey: fee_paying_address.script_pubkey(),
-        value: Amount::from_sat(10_000),
-    },
-                                              &withdrawal_address,
-                                              &trigger_tx)?;
+    let compete_tx = vault.create_complete_tx(
+        &fee_paying_utxo,
+        TxOut {
+            script_pubkey: fee_paying_address.script_pubkey(),
+            value: Amount::from_sat(10_000),
+        },
+        &withdrawal_address,
+        &trigger_tx,
+    )?;
     let signed_tx = fee_wallet.sign_tx(&compete_tx)?;
     let mut serialized_tx = Vec::new();
     signed_tx.consensus_encode(&mut serialized_tx).unwrap();
@@ -143,12 +155,7 @@ fn complete(settings: &Settings) -> Result<()> {
     let txid = fee_wallet.broadcast_tx(&serialized_tx, None)?;
     info!("sent txid: {}", txid);
     miner_wallet.mine_blocks(Some(1))?;
-    vault.set_current_outpoint(
-        OutPoint {
-            txid,
-            vout: 0,
-        }
-    );
+    vault.set_current_outpoint(OutPoint { txid, vout: 0 });
     vault.set_state(Completed);
     vault.to_file(&settings.vault_file)?;
 
@@ -166,10 +173,14 @@ fn trigger(destination: &str, steal: bool, settings: &Settings) -> Result<()> {
     let fee_paying_address = fee_wallet.get_new_address()?;
     let fee_paying_utxo = miner_wallet.send(&fee_paying_address, Amount::from_sat(10_000))?;
     miner_wallet.mine_blocks(Some(1))?;
-    let trigger_tx = vault.create_trigger_tx(&fee_paying_utxo, TxOut {
-        script_pubkey: fee_paying_address.script_pubkey(),
-        value: Amount::from_sat(10_000),
-    }, &withdrawal_address)?;
+    let trigger_tx = vault.create_trigger_tx(
+        &fee_paying_utxo,
+        TxOut {
+            script_pubkey: fee_paying_address.script_pubkey(),
+            value: Amount::from_sat(10_000),
+        },
+        &withdrawal_address,
+    )?;
     let signed_tx = fee_wallet.sign_tx(&trigger_tx)?;
     let mut serialized_tx = Vec::new();
     signed_tx.consensus_encode(&mut serialized_tx).unwrap();
@@ -178,10 +189,7 @@ fn trigger(destination: &str, steal: bool, settings: &Settings) -> Result<()> {
     info!("sent trigger transaction txid: {}", txid);
     miner_wallet.mine_blocks(Some(1))?;
 
-    vault.set_current_outpoint(OutPoint {
-        txid,
-        vout: 0,
-    });
+    vault.set_current_outpoint(OutPoint { txid, vout: 0 });
     if !steal {
         vault.set_withdrawal_address(Some(withdrawal_address));
         vault.set_trigger_transaction(Some(trigger_tx));

@@ -1,26 +1,24 @@
 use anyhow::Result;
-use bitcoin::{Amount, Sequence, TapLeafHash, TapSighash, TapSighashType, Transaction, TxOut};
+use bitcoin::absolute::LockTime;
 use bitcoin::consensus::Encodable;
-use bitcoin::hashes::{Hash, HashEngine, sha256};
+use bitcoin::hashes::{sha256, Hash, HashEngine};
 use bitcoin::hex::{Case, DisplayHex};
 use bitcoin::secp256k1::ThirtyTwoByteHash;
 use bitcoin::sighash::{Annex, Error};
-use log::debug;
-use bitcoin::absolute::LockTime;
+use bitcoin::{Amount, Sequence, TapLeafHash, TapSighash, TapSighashType, Transaction, TxOut};
 use lazy_static::lazy_static;
+use log::debug;
 use secp256kfun::G;
-
 
 lazy_static! {
     pub(crate) static ref G_X: [u8; 32] = G.into_point_with_even_y().0.to_xonly_bytes();
-
-    pub (crate) static ref TAPSIGHASH_TAG: [u8; 10] = {
+    pub(crate) static ref TAPSIGHASH_TAG: [u8; 10] = {
         let mut tag = [0u8; 10];
         let val = "TapSighash".as_bytes();
         tag.copy_from_slice(val);
         tag
     };
-    pub (crate) static ref BIP0340_CHALLENGE_TAG: [u8; 17] = {
+    pub(crate) static ref BIP0340_CHALLENGE_TAG: [u8; 17] = {
         let mut tag = [0u8; 17];
         let val = "BIP0340/challenge".as_bytes();
         tag.copy_from_slice(val);
@@ -35,7 +33,6 @@ lazy_static! {
         dust
     };
 }
-
 
 #[derive()]
 pub(crate) struct TxCommitmentSpec {
@@ -154,7 +151,10 @@ pub(crate) fn get_sigmsg_components<S: Into<TapLeafHash>>(
 
             let hash = sha256::Hash::hash(&buffer);
             hash.consensus_encode(&mut prev_amounts).unwrap();
-            debug!("prev_amounts: {:?}", prev_amounts.to_hex_string(Case::Lower));
+            debug!(
+                "prev_amounts: {:?}",
+                prev_amounts.to_hex_string(Case::Lower)
+            );
             components.push(prev_amounts);
         }
         if spec.prev_sciptpubkeys {
@@ -163,11 +163,17 @@ pub(crate) fn get_sigmsg_components<S: Into<TapLeafHash>>(
             for p in prevouts {
                 p.script_pubkey.consensus_encode(&mut buffer).unwrap();
             }
-            debug!("prev_sciptpubkeys buffer: {:?}", buffer.to_hex_string(Case::Lower));
+            debug!(
+                "prev_sciptpubkeys buffer: {:?}",
+                buffer.to_hex_string(Case::Lower)
+            );
 
             let hash = sha256::Hash::hash(&buffer);
             hash.consensus_encode(&mut prev_sciptpubkeys).unwrap();
-            debug!("prev_sciptpubkeys: {:?}", prev_sciptpubkeys.to_hex_string(Case::Lower));
+            debug!(
+                "prev_sciptpubkeys: {:?}",
+                prev_sciptpubkeys.to_hex_string(Case::Lower)
+            );
             components.push(prev_sciptpubkeys);
         }
         if spec.sequences {
@@ -206,7 +212,10 @@ pub(crate) fn get_sigmsg_components<S: Into<TapLeafHash>>(
             spend_type |= 2u8;
         }
         spend_type.consensus_encode(&mut encoded_spend_type)?;
-        debug!("spend_type: {:?}", encoded_spend_type.to_hex_string(Case::Lower));
+        debug!(
+            "spend_type: {:?}",
+            encoded_spend_type.to_hex_string(Case::Lower)
+        );
         components.push(encoded_spend_type);
     }
 
@@ -243,7 +252,10 @@ pub(crate) fn get_sigmsg_components<S: Into<TapLeafHash>>(
         previous_output
             .script_pubkey
             .consensus_encode(&mut script_pubkey)?;
-        debug!("input script_pubkey: {:?}", script_pubkey.to_hex_string(Case::Lower));
+        debug!(
+            "input script_pubkey: {:?}",
+            script_pubkey.to_hex_string(Case::Lower)
+        );
         components.push(script_pubkey);
         let mut sequence = Vec::new();
         txin.sequence.consensus_encode(&mut sequence)?;
@@ -286,7 +298,10 @@ pub(crate) fn get_sigmsg_components<S: Into<TapLeafHash>>(
             .consensus_encode(&mut enc)?;
         let hash = sha256::Hash::from_engine(enc);
         hash.consensus_encode(&mut encoded_single_output)?;
-        debug!("single_output: {:?}", encoded_single_output.to_hex_string(Case::Lower));
+        debug!(
+            "single_output: {:?}",
+            encoded_single_output.to_hex_string(Case::Lower)
+        );
         components.push(encoded_single_output);
     }
 
@@ -303,15 +318,24 @@ pub(crate) fn get_sigmsg_components<S: Into<TapLeafHash>>(
             let mut encoded_leaf_hash = Vec::new();
             hash.as_byte_array()
                 .consensus_encode(&mut encoded_leaf_hash)?;
-            debug!("leaf_hash: {:?}", encoded_leaf_hash.to_hex_string(Case::Lower));
+            debug!(
+                "leaf_hash: {:?}",
+                encoded_leaf_hash.to_hex_string(Case::Lower)
+            );
             components.push(encoded_leaf_hash);
             let mut encoded_leaf_hash = Vec::new();
             KEY_VERSION_0.consensus_encode(&mut encoded_leaf_hash)?;
-            debug!("leaf_ver: {:?}", encoded_leaf_hash.to_hex_string(Case::Lower));
+            debug!(
+                "leaf_ver: {:?}",
+                encoded_leaf_hash.to_hex_string(Case::Lower)
+            );
             components.push(encoded_leaf_hash);
             let mut encoded_leaf_hash = Vec::new();
             code_separator_pos.consensus_encode(&mut encoded_leaf_hash)?;
-            debug!("code_separator_pos: {:?}", encoded_leaf_hash.to_hex_string(Case::Lower));
+            debug!(
+                "code_separator_pos: {:?}",
+                encoded_leaf_hash.to_hex_string(Case::Lower)
+            );
             components.push(encoded_leaf_hash);
         }
     }
