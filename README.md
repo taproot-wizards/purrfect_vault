@@ -137,7 +137,7 @@ These steps use `just` as a command wrapper around the `purrfect_vault` binary t
 
 ### Wow. This is a lot of spaghetti.
 
-That's not a question. Also, yes. PR's welcome. 
+That's not a question. Also, yes. This was hacked together and then I released it. It needs some good honest refactoring. PR's welcome. 
 
 ### Why doesn't this support [feature]?
 
