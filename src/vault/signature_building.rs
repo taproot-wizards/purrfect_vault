@@ -84,14 +84,11 @@ pub(crate) fn get_sigmsg_components<S: Into<TapLeafHash>>(
     sighash_type: TapSighashType,
 ) -> Result<Vec<Vec<u8>>> {
     // all this serialization code was lifted from bitcoin-0.31.1/src/crypto/sighash.rs:597 and
-    // then very violently hacked up
+    // then very violently hacked up.
 
     let mut components = Vec::new();
 
     let leaf_hash_code_separator = Some((leaf_hash.into(), 0xFFFFFFFFu32));
-
-    // all this serialization code was lifted from bitcoin-0.31.1/src/crypto/sighash.rs:597 and
-    // then violently hacked up
 
     let (sighash, anyone_can_pay) = match sighash_type {
         TapSighashType::Default => (bitcoin::TapSighashType::Default, false),
@@ -213,7 +210,7 @@ pub(crate) fn get_sigmsg_components<S: Into<TapLeafHash>>(
         components.push(encoded_spend_type);
     }
 
-    // TODO: wrap these fields in spec checks. right now we dont use ANYONECANPAY so it doesnt matter
+    // TODO: wrap these fields in spec checks. right now we dont use ANYONECANPAY so it doesnt matter. But some other applications might want to use it.
 
     // If hash_type & 0x80 equals SIGHASH_ANYONECANPAY:
     //      outpoint (36): the COutPoint of this input (32-byte hash + 4-byte little-endian).

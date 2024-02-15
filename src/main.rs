@@ -40,10 +40,20 @@ enum Action {
 fn main() -> Result<()> {
     env_logger::init();
 
-    println!("lets do something with cat... or something");
+    println!("A kinda vault-y thing with CATs!");
 
     let args = Cli::parse();
-    let settings = Settings::from_toml_file(&args.settings_file)?;
+
+    let settings = match Settings::from_toml_file(&args.settings_file) {
+        Ok(settings) => settings,
+        Err(e) => {
+            error!("Error reading settings file: {}", e);
+            info!("Creating a new settings file at {}", args.settings_file.display());
+            let settings = Settings::default();
+            settings.to_toml_file(&args.settings_file)?;
+            settings
+        }
+    };
 
     match args.action {
         Action::Deposit => deposit(&settings)?,
