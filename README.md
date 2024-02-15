@@ -156,5 +156,8 @@ We're able to do all of these things with CAT, so I'm happy with the results.
 
 They'd get a little bigger with a signature check, but not much.
 
+### Seems like we could get rid of some of these CATs by just concatenating elemtents before they go into the witness. Why don't we do that?
+Yep! There is quite a bit of script optimization that could be done. I have a generic function for getting the SigMsg components and I just use that everywhere.
+
 ### Can I contribute?
 Yes! PR's welcome. I'm happy to review and help you get your PR merged. I'm also happy to help you get set up with the project if you're having trouble. Just ask!
