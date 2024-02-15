@@ -2,14 +2,17 @@ use anyhow::{anyhow, Result};
 use bitcoin::{Address, Amount, Network, OutPoint, Sequence, TapLeafHash, TapSighashType, Transaction, TxIn, TxOut, XOnlyPublicKey};
 use bitcoin::absolute::LockTime;
 use bitcoin::consensus::Encodable;
-use bitcoin::hashes::Hash;
+use bitcoin::hashes::{Hash, sha256};
 use bitcoin::hex::{Case, DisplayHex};
 use bitcoin::key::Secp256k1;
+use bitcoin::secp256k1::ThirtyTwoByteHash;
 use bitcoin::taproot::{LeafVersion, TaprootBuilder, TaprootSpendInfo};
 use bitcoin::transaction::Version;
-use log::{debug, info};
+use log::debug;
+use secp256kfun::{G, Point};
+use secp256kfun::marker::{EvenY, NonZero, Public};
+use serde::{Deserialize, Serialize};
 
-use crate::G_X;
 use crate::settings::Settings;
 use crate::vault::{contract, signature_building};
 use crate::vault::script::{vault_cancel_withdrawal, vault_complete_withdrawal, vault_trigger_withdrawal};
@@ -17,12 +20,7 @@ use crate::vault::signature_building::{
     get_sigmsg_components, TxCommitmentSpec,
 };
 
-pub(crate) enum VaultOperation {
-    Trigger,
-    Complete,
-    Cancel,
-}
-
+#[derive(Serialize, Deserialize)]
 pub(crate) struct VaultCovenant {
     current_outpoint: Option<OutPoint>,
     amount: Amount,
@@ -36,15 +34,16 @@ impl Default for VaultCovenant {
             current_outpoint: None,
             amount: Amount::ZERO,
             network: Network::Regtest,
-            timelock_in_blocks: 2,
+            timelock_in_blocks: 20,
         }
     }
 }
 
 impl VaultCovenant {
-    pub(crate) fn new(settings: &Settings) -> Result<Self> {
+    pub(crate) fn new(timelock_in_blocks: u16, settings: &Settings) -> Result<Self> {
         Ok(Self {
             network: settings.network,
+            timelock_in_blocks,
             ..Default::default()
         })
     }
@@ -62,8 +61,11 @@ impl VaultCovenant {
     }
 
     fn taproot_spend_info(&self) -> Result<TaprootSpendInfo> {
-        // TODO: change this to the hash of G_X, not G_X itself
-        let nums_key = XOnlyPublicKey::from_slice(G_X.as_slice())?;
+        // hash G into a NUMS point
+        let hash = sha256::Hash::hash(G.to_bytes_uncompressed().as_slice());
+        let point: Point<EvenY, Public, NonZero> = Point::from_xonly_bytes(hash.into_32())
+            .ok_or(anyhow!("G_X hash should be a valid x-only point"))?;
+        let nums_key = XOnlyPublicKey::from_slice(point.to_xonly_bytes().as_slice())?;
         let secp = Secp256k1::new();
         Ok(TaprootBuilder::new()
             .add_leaf(1, vault_trigger_withdrawal())?
@@ -245,11 +247,6 @@ impl VaultCovenant {
         }
 
         debug!("Previous TXID: {}", trigger_tx.txid());
-        let mut txid_buffer = Vec::new();
-        trigger_tx.txid().consensus_encode(&mut txid_buffer)?;
-        vault_txin.witness.push(txid_buffer.as_slice());
-
-
 
         // stick all the previous txn components except the outputs into the witness
         let mut version_buffer = Vec::new();
@@ -267,14 +264,9 @@ impl VaultCovenant {
             vault_txin.witness.push(chunk);
         }
 
-
-        // let mut output_buffer = Vec::new();
-        // trigger_tx.output.consensus_encode(&mut output_buffer)?;
-        // vault_txin.witness.push(output_buffer.as_slice());
         let mut locktime_buffer = Vec::new();
         trigger_tx.lock_time.consensus_encode(&mut locktime_buffer)?;
         vault_txin.witness.push(locktime_buffer.as_slice());
-
 
 
         let mut vault_scriptpubkey_buffer = Vec::new();
@@ -307,20 +299,6 @@ impl VaultCovenant {
                 .serialize(),
         );
 
-
-        let mut txid_cal_buffer = Vec::new();
-        trigger_tx.version.consensus_encode(&mut txid_cal_buffer)?;
-        trigger_tx.input.consensus_encode(&mut txid_cal_buffer)?;
-        trigger_tx.output.consensus_encode(&mut txid_cal_buffer)?;
-        trigger_tx.lock_time.consensus_encode(&mut txid_cal_buffer)?;
-        debug!("calculated TXID buffer: <0x{}>", txid_cal_buffer.to_hex_string(Case::Lower));
-        // hash the buffer twice
-        let txid = bitcoin::hashes::sha256d::Hash::hash(&txid_cal_buffer);
-        debug!("calculated TXID: {}", txid);
-
-        for elem in vault_txin.witness.iter() {
-            println!("<0x{}>", elem.to_hex_string(Case::Lower));
-        }
         txn.input.first_mut().unwrap().witness = vault_txin.witness.clone();
 
         Ok(txn)

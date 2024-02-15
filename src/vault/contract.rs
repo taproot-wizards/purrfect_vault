@@ -4,9 +4,13 @@ use bitcoin::consensus::Encodable;
 use bitcoin::hex::{Case, DisplayHex};
 use lazy_static::lazy_static;
 use log::debug;
+use secp256kfun::G;
 use crate::vault::signature_building::{compute_challenge, compute_sigmsg_from_components, get_sigmsg_components, TxCommitmentSpec};
 
+
 lazy_static! {
+    pub(crate) static ref G_X: [u8; 32] = G.into_point_with_even_y().0.to_xonly_bytes();
+
     pub (crate) static ref TAPSIGHASH_TAG: [u8; 10] = {
         let mut tag = [0u8; 10];
         let val = "TapSighash".as_bytes();

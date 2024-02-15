@@ -8,7 +8,6 @@ use serde::Deserialize;
 use crate::settings::Settings;
 
 pub(crate) struct Wallet {
-    pub name: String,
     client: Client,
     network: Network,
 }
@@ -64,7 +63,6 @@ impl Wallet {
 
         let url = format!("http://127.0.0.1:{}/wallet/{name}", port);
         Wallet {
-            name,
             client: Client::new(&url, auth).unwrap(),
             network: settings.network,
         }
@@ -124,7 +122,7 @@ impl Wallet {
         debug!("sent txid: {}", txid);
         let transaction_info = self.client.get_transaction(&txid, None)?;
         let mut target_vout = 0;
-        for (i, details) in transaction_info.details.iter().enumerate() {
+        for (_, details) in transaction_info.details.iter().enumerate() {
             if &details.address.clone().unwrap().assume_checked() == address {
                 target_vout = details.vout;
                 break;

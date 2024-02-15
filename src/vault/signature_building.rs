@@ -1,13 +1,13 @@
 use anyhow::Result;
+use bitcoin::{TapLeafHash, TapSighash, TapSighashType, Transaction, TxOut};
 use bitcoin::consensus::Encodable;
-use bitcoin::hashes::{sha256, Hash, HashEngine};
+use bitcoin::hashes::{Hash, HashEngine, sha256};
+use bitcoin::hex::{Case, DisplayHex};
 use bitcoin::secp256k1::ThirtyTwoByteHash;
 use bitcoin::sighash::{Annex, Error};
-use bitcoin::{TapLeafHash, TapSighash, TapSighashType, Transaction, TxOut};
-use bitcoin::hex::{Case, DisplayHex};
-use log::{debug, trace};
+use log::debug;
 
-use crate::G_X;
+use crate::vault::contract::G_X;
 
 #[derive()]
 pub(crate) struct TxCommitmentSpec {

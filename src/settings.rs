@@ -1,7 +1,8 @@
+use std::path::PathBuf;
+
 use anyhow::Result;
 use bitcoin::Network;
 use serde::{Deserialize, Serialize};
-use std::path::{Path, PathBuf};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub(crate) struct Settings {
@@ -9,6 +10,8 @@ pub(crate) struct Settings {
     pub bitcoin_rpc_username: String,
     pub bitcoin_rpc_password: String,
     pub create_wallets: bool,
+    pub miner_wallet_name: String,
+    pub fee_wallet_name: String,
 }
 
 impl Default for Settings {
@@ -18,6 +21,8 @@ impl Default for Settings {
             bitcoin_rpc_username: "user".to_string(),
             bitcoin_rpc_password: "password".to_string(),
             create_wallets: false,
+            miner_wallet_name: "miner".to_string(),
+            fee_wallet_name: "fee_payment".to_string(),
         }
     }
 }

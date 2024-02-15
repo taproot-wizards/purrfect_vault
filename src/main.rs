@@ -1,16 +1,13 @@
 use std::path::PathBuf;
 
 use anyhow::Result;
-use bitcoin::consensus::Encodable;
 use bitcoin::{Amount, OutPoint, TxOut};
+use bitcoin::consensus::Encodable;
 use bitcoincore_rpc::RawTx;
 use clap::Parser;
-use lazy_static::lazy_static;
-use log::{debug, info, LevelFilter};
-use secp256kfun::G;
+use log::{debug, info};
 
 use crate::settings::Settings;
-use crate::vault::basic_recursive_covenant::BasicRecursiveCovenant;
 use crate::vault::vault_contract::VaultCovenant;
 use crate::wallet::Wallet;
 
@@ -18,14 +15,24 @@ mod settings;
 mod vault;
 mod wallet;
 
-lazy_static! {
-    static ref G_X: [u8; 32] = G.into_point_with_even_y().0.to_xonly_bytes();
-}
+
 
 #[derive(Parser)]
 struct Cli {
     #[arg(short, long, default_value = "settings.toml")]
     settings_file: PathBuf,
+
+//    #[command(subcommand)]
+//    action: Action,
+}
+
+#[derive(Parser)]
+enum Action {
+    Deposit,
+    Trigger{destination: String},
+    Complete,
+    Cancel,
+    Status,
 }
 
 fn main() -> Result<()> {
@@ -51,7 +58,8 @@ fn main() -> Result<()> {
     }
 
     println!("lets make a vault");
-    let mut vault = VaultCovenant::new(&settings)?;
+    let timelock_in_blocks = 20;
+    let mut vault = VaultCovenant::new(timelock_in_blocks, &settings)?;
 
     info!("depositing into vault");
     let vault_address = vault.address()?;
@@ -87,8 +95,8 @@ fn main() -> Result<()> {
 
     let fee_paying_address = fee_wallet.get_new_address()?;
     let fee_paying_utxo = miner_wallet.send(&fee_paying_address, Amount::from_sat(10_000))?;
-    info!("need to mine 2 blocks");
-    miner_wallet.mine_blocks(Some(2))?;
+    info!("need to mine {timelock_in_blocks} blocks for the timelock");
+    miner_wallet.mine_blocks(Some(timelock_in_blocks as u64))?;
     let compete_tx = vault.create_complete_tx(&fee_paying_utxo, TxOut {
         script_pubkey: fee_paying_address.script_pubkey(),
         value: Amount::from_sat(10_000),

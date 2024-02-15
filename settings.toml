@@ -2,3 +2,5 @@ network = "regtest"
 bitcoin_rpc_username = "user"
 bitcoin_rpc_password = "password"
 create_wallets = true
+miner_wallet_name = "miner"
+fee_wallet_name = "fee_payment"

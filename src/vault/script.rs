@@ -1,9 +1,8 @@
-use crate::{G_X, vault};
-use bitcoin::opcodes::all::{OP_2DUP, OP_CAT, OP_CHECKSIG, OP_CHECKSIGVERIFY, OP_CSV, OP_DROP, OP_DUP, OP_EQUAL, OP_EQUALVERIFY, OP_FROMALTSTACK, OP_HASH256, OP_ROLL, OP_ROT, OP_SHA256, OP_SWAP, OP_TOALTSTACK};
 use bitcoin::{Script, ScriptBuf, Sequence};
+use bitcoin::opcodes::all::{OP_2DUP, OP_CAT, OP_CHECKSIG, OP_CSV, OP_DROP, OP_DUP, OP_EQUALVERIFY, OP_FROMALTSTACK, OP_HASH256, OP_ROT, OP_SHA256, OP_SWAP, OP_TOALTSTACK};
 use bitcoin::script::Builder;
-use crate::vault::contract::{BIP0340_CHALLENGE_TAG, DUST_AMOUNT, TAPSIGHASH_TAG};
-use lazy_static::lazy_static;
+
+use crate::vault::contract::{BIP0340_CHALLENGE_TAG, DUST_AMOUNT, G_X, TAPSIGHASH_TAG};
 
 pub(crate) fn vault_trigger_withdrawal() -> ScriptBuf {
     let mut builder = Script::builder();
@@ -69,13 +68,6 @@ pub(crate) fn vault_trigger_withdrawal() -> ScriptBuf {
 
 pub(crate) fn vault_complete_withdrawal(timelock_in_blocks: u16) -> ScriptBuf {
 
-    // things that need to be checked:
-    // timelock
-    // previous transaction had the second output as a 546 sat output, address is the destination of this transaction
-    // amount of the first output of that transaction is the same as the amount of the first output of this transaction
-
-
-
     let mut builder = Script::builder();
     // The witness program needs to have the signature components except the outputs, prevouts,
     // followed by the previous transaction version, inputs, and locktime
@@ -83,9 +75,9 @@ pub(crate) fn vault_complete_withdrawal(timelock_in_blocks: u16) -> ScriptBuf {
     // followed by the fee-paying txout
     // and finally the mangled signature
     builder = builder
-//        .push_sequence(Sequence::from_height(timelock_in_blocks))
-//        .push_opcode(OP_CSV) // check relative timelock on withdrawal
-//        .push_opcode(OP_DROP) // drop the result
+       .push_sequence(Sequence::from_height(timelock_in_blocks))
+       .push_opcode(OP_CSV) // check relative timelock on withdrawal
+       .push_opcode(OP_DROP) // drop the result
         .push_opcode(OP_TOALTSTACK) // move pre-computed signature minus last byte to alt stack
         .push_opcode(OP_TOALTSTACK) // move the fee-paying txout to the alt stack
         .push_opcode(OP_DUP) // make a second copy of the target scriptpubkey so we can use it later
@@ -113,8 +105,6 @@ pub(crate) fn vault_complete_withdrawal(timelock_in_blocks: u16) -> ScriptBuf {
         .push_opcode(OP_CAT) // add the inputs
         .push_opcode(OP_CAT) // add the previous TX version
         .push_opcode(OP_HASH256)// hash the whole thing twice to get the TXID
-        .push_opcode(OP_DUP) // make a second copy of the TXID so we can check it
-        .push_opcode(OP_EQUALVERIFY) // check the TXID
         .push_opcode(OP_FROMALTSTACK) // get the output commitment
         .push_opcode(OP_SWAP) // move the output commitment below the TXID
         .push_opcode(OP_TOALTSTACK)// move the TXID to the alt stack
