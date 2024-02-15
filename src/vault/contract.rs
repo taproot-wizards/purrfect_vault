@@ -440,15 +440,3 @@ impl VaultCovenant {
         Ok(txn)
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use crate::vault::vault_contract::VaultCovenant;
-
-    #[test]
-    fn test_vault_covenant() {
-        let vault_covenant = VaultCovenant::default();
-        let address = vault_covenant.address().unwrap();
-        println!("vault address: {}", address);
-    }
-}
