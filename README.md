@@ -4,7 +4,7 @@
 
 This repo contains a demo of an onchain Bitcoin Vault using OP_CAT to create a covenant that allows for a multi-step withdrawal process to be validated onchain.
 
-Basically, you will have a special addressed called the vault. Coins from his address can **only** be spent in the following way:
+Basically, you will have a special address called the vault. Coins from his address can **only** be spent in the following way:
 
 - You can initiate a withdrawal from the vault by creating a transaction with 2 inputs (the vault as the first input, and a fee-paying second input), and two outputs (the vault with the amount to be withdrawn, and the target address with a dust amount).
 - Once the vault is in the Triggered state, you can either:
