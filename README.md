@@ -122,7 +122,7 @@ Follow these steps to create a vault that is configured to allow a withdrawal af
 
 These steps use `just` as a command wrapper around the `purrfect_vault` binary to set the log level. If you don't want to use `just`, you can run the `purrfect_vault` binary directly from the `target/release/` directory with the same arguments, or pass `-h` to see options.
 
-1. Run a CAT-enabled bitcoind in regtest mode. This will be done either using `just bootstrap`, or you can run it with `just run-bitcoind`, or run it yourself with the `bitcoin-core-cat` binary that was built.
+1. Run a CAT-enabled bitcoind in regtest mode. This will be done either using `just bootstrap`, or you can run it with `just start-bitcoind`, or run it yourself with the `bitcoin-core-cat` binary that was built.
 2. Start by running `just deposit`. This will create a miner wallet, mine some coins, and then create a new vault and deposit some coins into it.
 3. Run `just status` to see the status of the vault.
 4. Try to steal from the vault with `just steal`. This will generate an address from the miner wallet and initiate a withdrawal to it. Alternatively you can execute the `purrfect_vault` binary with the `steal` subcommand and pass an address of your choosing. It will also mine a block to confirm the transaction
