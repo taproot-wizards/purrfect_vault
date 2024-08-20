@@ -84,7 +84,7 @@ fn status(settings: &Settings) -> Result<()> {
             latest_state_onchain
         );
     } else if latest_state_onchain == Triggered {
-        error!("Onchain state is Triggered, but the internal vault state is not. You can MIGHT BE GETTING ROBBED! Run the `cancel` command to cancel the withdrawal and SAVE YOUR MONEY!");
+        error!("Onchain state is Triggered, but the internal vault state is not. YOU MIGHT BE GETTING ROBBED! Run the `cancel` command to cancel the withdrawal and SAVE YOUR MONEY!");
     } else if vault.get_state() == Completed {
         info!("Vault state is Completed. This is expected after a successful withdrawal.");
     } else {
