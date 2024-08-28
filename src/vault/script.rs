@@ -1,19 +1,22 @@
 use crate::vault::signature_building::{BIP0340_CHALLENGE_TAG, DUST_AMOUNT, G_X, TAPSIGHASH_TAG};
 use bitcoin::opcodes::all::{
     OP_2DUP, OP_CAT, OP_CHECKSIG, OP_CSV, OP_DROP, OP_DUP, OP_EQUALVERIFY, OP_FROMALTSTACK,
-    OP_HASH256, OP_ROT, OP_SHA256, OP_SWAP, OP_TOALTSTACK,
+    OP_HASH256, OP_ROT, OP_SHA256, OP_SWAP, OP_TOALTSTACK, OP_CHECKSIGVERIFY
 };
 use bitcoin::script::Builder;
-use bitcoin::{Script, ScriptBuf, Sequence};
+use bitcoin::{Script, ScriptBuf, Sequence, XOnlyPublicKey};
 
-pub(crate) fn vault_trigger_withdrawal() -> ScriptBuf {
+pub(crate) fn vault_trigger_withdrawal(x_only_pubkey: XOnlyPublicKey) -> ScriptBuf {
     let mut builder = Script::builder();
     // The witness program needs to have the signature components except the outputs and the pre_scriptpubkeys and pre_amounts,
     // followed by the target scriptpubkey (the amount for that output will be fixed)
     // followed by the vault output amount, then the vault scriptpubkey,
     // followed by the fee amount, then the fee-paying scriptpubkey
-    // and finally the mangled signature
+    // followed by the mangled signature
+    // and finally the a normal signature that signs with vault pubkey
     builder = builder
+        .push_x_only_key(&x_only_pubkey) // push vault pubkey
+        .push_opcode(OP_CHECKSIGVERIFY) // checksig for pubkey
         .push_opcode(OP_TOALTSTACK) // move pre-computed signature minus last byte to alt stack
         .push_opcode(OP_TOALTSTACK) // push the fee-paying scriptpubkey to the alt stack
         .push_opcode(OP_TOALTSTACK) // push the fee amount to the alt stack
@@ -68,14 +71,17 @@ pub(crate) fn vault_trigger_withdrawal() -> ScriptBuf {
     builder.into_script()
 }
 
-pub(crate) fn vault_complete_withdrawal(timelock_in_blocks: u16) -> ScriptBuf {
+pub(crate) fn vault_complete_withdrawal(x_only_pubkey: XOnlyPublicKey, timelock_in_blocks: u16) -> ScriptBuf {
     let mut builder = Script::builder();
     // The witness program needs to have the signature components except the outputs, prevouts,
     // followed by the previous transaction version, inputs, and locktime
     // followed by vault SPK, the vault amount, and the target SPK
     // followed by the fee-paying txout
-    // and finally the mangled signature
+    // followed by the mangled signature
+    // and finally the a normal signature that signs with vault pubkey
     builder = builder
+        .push_x_only_key(&x_only_pubkey) // push vault pubkey
+        .push_opcode(OP_CHECKSIGVERIFY) // checksig for pubkey
         .push_sequence(Sequence::from_height(timelock_in_blocks))
         .push_opcode(OP_CSV) // check relative timelock on withdrawal
         .push_opcode(OP_DROP) // drop the result
@@ -137,13 +143,16 @@ pub(crate) fn vault_complete_withdrawal(timelock_in_blocks: u16) -> ScriptBuf {
     builder.into_script()
 }
 
-pub(crate) fn vault_cancel_withdrawal() -> ScriptBuf {
+pub(crate) fn vault_cancel_withdrawal(x_only_pubkey: XOnlyPublicKey) -> ScriptBuf {
     let mut builder = Script::builder();
     // The witness program needs to have the signature components except the outputs and the pre_scriptpubkeys and pre_amounts,
     // followed by the output amount, then the script pubkey,
     // followed by the fee amount, then the fee-paying scriptpubkey
-    // and finally the mangled signature
+    // followed by the mangled signature
+    // and finally the a normal signature that signs with vault pubkey
     builder = builder
+        .push_x_only_key(&x_only_pubkey) // push vault pubkey
+        .push_opcode(OP_CHECKSIGVERIFY) // checksig for pubkey
         .push_opcode(OP_TOALTSTACK) // move pre-computed signature minus last byte to alt stack
         .push_opcode(OP_TOALTSTACK) // push the fee-paying scriptpubkey to the alt stack
         .push_opcode(OP_TOALTSTACK) // push the fee amount to the alt stack
