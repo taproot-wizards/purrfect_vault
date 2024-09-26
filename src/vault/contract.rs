@@ -58,11 +58,13 @@ pub(crate) struct VaultCovenant {
     withdrawal_address: Option<String>,
     trigger_transaction: Option<Transaction>,
     state: VaultState,
-    keypair: Option<Keypair>,
+    keypair: Keypair,
 }
 
 impl Default for VaultCovenant {
     fn default() -> Self {
+        let secp = Secp256k1::new();
+        let keypair = Keypair::new(&secp, &mut rand::thread_rng());
         Self {
             current_outpoint: None,
             amount: Amount::ZERO,
@@ -71,19 +73,16 @@ impl Default for VaultCovenant {
             withdrawal_address: None,
             trigger_transaction: None,
             state: VaultState::Inactive,
-            keypair: None,
+            keypair,
         }
     }
 }
 
 impl VaultCovenant {
     pub(crate) fn new(timelock_in_blocks: u16, settings: &Settings) -> Result<Self> {
-        let secp = Secp256k1::new();
-        let keypair = Keypair::new(&secp, &mut rand::thread_rng());
         Ok(Self {
             network: settings.network,
             timelock_in_blocks,
-            keypair: Some(keypair),
             ..Default::default()
         })
     }
@@ -175,7 +174,7 @@ impl VaultCovenant {
     }
 
     fn x_only_public_key(&self) -> XOnlyPublicKey {
-        return self.keypair.unwrap().x_only_public_key().0
+        return self.keypair.x_only_public_key().0
     }
 
     fn sign_transaction(&self, txn: &Transaction, prevouts: &[TxOut], leaf_hash: TapLeafHash) -> Vec<u8> {
@@ -188,7 +187,7 @@ impl VaultCovenant {
             TapSighashType::All
         ).unwrap();
         let message = Message::from_digest_slice(sighash.as_byte_array()).unwrap();
-        let signature = secp.sign_schnorr(&message, &self.keypair.unwrap());
+        let signature = secp.sign_schnorr(&message, &self.keypair);
         let final_sig = Signature { sig: signature, hash_ty: TapSighashType::All };
         return final_sig.to_vec()
     }
