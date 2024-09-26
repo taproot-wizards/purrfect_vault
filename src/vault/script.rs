@@ -216,6 +216,8 @@ pub(crate) fn add_signature_construction_and_check(builder: Builder) -> Builder 
         .push_slice(*G_X) // G is used for the pubkey and K
         .push_opcode(OP_DUP)
         .push_opcode(OP_DUP)
+        .push_opcode(OP_DUP)
+        .push_opcode(OP_TOALTSTACK) // we'll need a copy of G later to be our R value in the signature
         .push_opcode(OP_TOALTSTACK) // we'll need a copy of G later to be our R value in the signature
         .push_opcode(OP_ROT) // bring the challenge to the top of the stack
         .push_opcode(OP_CAT)
@@ -226,7 +228,10 @@ pub(crate) fn add_signature_construction_and_check(builder: Builder) -> Builder 
         .push_opcode(OP_FROMALTSTACK) // bring G back from the alt stack to use as the R value in the signature
         .push_opcode(OP_SWAP)
         .push_opcode(OP_CAT) // cat the R value with the s value for a complete signature
+        .push_opcode(OP_FROMALTSTACK) // bring G back from the alt stack to use as the R value in the signature
         .push_opcode(OP_FROMALTSTACK) // grab the pre-computed signature minus the last byte from the alt stack
+        .push_opcode(OP_ROT)// Move the G value to the bottom of the stack
+        .push_opcode(OP_SWAP) // put the pre-computed signature on the top of the stack
         .push_opcode(OP_DUP) // we'll need a second copy later to do the actual signature verification
         .push_opcode(OP_FROMALTSTACK) // grab the last byte of the signature hash from the alt stack
         .push_opcode(OP_CAT)
@@ -234,6 +239,6 @@ pub(crate) fn add_signature_construction_and_check(builder: Builder) -> Builder 
         .push_opcode(OP_EQUALVERIFY) // check that the script-computed and pre-computed signatures match
         .push_opcode(OP_FROMALTSTACK) // grab the last byte of the signature from the alt stack, should be +1 from the pre-computed signature
         .push_opcode(OP_CAT)
-        .push_slice(*G_X) // push G again. TODO: DUP this from before and stick it in the alt stack or something
+        .push_opcode(OP_SWAP) // bring G to the top of the stack
         .push_opcode(OP_CHECKSIG)
 }
