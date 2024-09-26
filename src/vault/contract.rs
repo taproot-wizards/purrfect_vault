@@ -272,6 +272,8 @@ impl VaultCovenant {
         )?;
         let mangled_signature: [u8; 63] = computed_signature[0..63].try_into().unwrap(); // chop off the last byte, so we can provide the 0x00 and 0x01 bytes on the stack
         vault_txin.witness.push(mangled_signature);
+        vault_txin.witness.push([computed_signature[63]]); // push the last byte of the signature
+        vault_txin.witness.push([computed_signature[63] + 1]); // push the last byte of the signature
 
         vault_txin
             .witness
@@ -413,6 +415,8 @@ impl VaultCovenant {
         )?;
         let mangled_signature: [u8; 63] = computed_signature[0..63].try_into().unwrap(); // chop off the last byte, so we can provide the 0x00 and 0x01 bytes on the stack
         vault_txin.witness.push(mangled_signature);
+        vault_txin.witness.push([computed_signature[63]]); // push the last byte of the signature
+        vault_txin.witness.push([computed_signature[63] + 1]); // push the last byte of the signature
 
         vault_txin
             .witness
@@ -523,6 +527,8 @@ impl VaultCovenant {
 
         let mangled_signature: [u8; 63] = computed_signature[0..63].try_into().unwrap(); // chop off the last byte, so we can provide the 0x00 and 0x01 bytes on the stack
         vault_txin.witness.push(mangled_signature);
+        vault_txin.witness.push([computed_signature[63]]); // push the last byte of the signature
+        vault_txin.witness.push([computed_signature[63] + 1]); // push the last byte of the signature
 
         vault_txin
             .witness

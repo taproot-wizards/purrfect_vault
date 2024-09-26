@@ -9,6 +9,6 @@ git clone --depth 1 --branch dont-success-cat git@github.com:rot13maxi/bitcoin.g
 
 pushd bitcoin-core-cat
 ./autogen.sh
-./configure
+./configure --without-tests --disable-bench
 make -j4
 popd

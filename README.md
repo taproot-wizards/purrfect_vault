@@ -83,8 +83,8 @@ Right now the vault always spends back to itself when you cancel. In real life y
 That would be an easy change to make, but was elided for simplicity in this demo.
 
 The Schnorr signature that you create on the stack is equal to SigMsg + 1. You need to grind the transaction data to get the right last bytes of the signature.
-I use a combination of grinding the low-order bits of the Locktime and the Sequence number of the last input in order to get a signature with the last byte. For my construction,
-that was fine. For other constructions, you might need to grind the last byte of the signature in a different way.
+I use a combination of grinding the low-order bits of the Locktime and the Sequence number of the last input in order to get a signature with the last byte. 
+Luckily, there are only two values that are not allowed for the last byte (0x7f and 0xff), so the grinding is easy. See [this post for more details](https://delvingbitcoin.org/t/efficient-multi-input-transaction-grinding-for-op-cat-based-bitcoin-covenants/1080).
 
 Re-building a TXID on the stack to introspect previous transactions was actually easier than I expected. Two wrinkles I ran into were:
 - There is a standardness rule on witness stack items (80 bytes). I had to split the outputs of the previous transaction into two chunks in order to get them on the stack and then glue it together with OP_CAT.
