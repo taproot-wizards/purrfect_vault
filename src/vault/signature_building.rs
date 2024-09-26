@@ -44,6 +44,7 @@ pub(crate) struct TxCommitmentSpec {
     pub(crate) prev_amounts: bool,
     pub(crate) prev_sciptpubkeys: bool,
     pub(crate) sequences: bool,
+    pub(crate) input_index: bool,
     pub(crate) outputs: bool,
     pub(crate) spend_type: bool,
     pub(crate) annex: bool,
@@ -62,6 +63,7 @@ impl Default for TxCommitmentSpec {
             prev_amounts: true,
             prev_sciptpubkeys: true,
             sequences: true,
+            input_index: true,
             outputs: true,
             spend_type: true,
             annex: true,
@@ -262,10 +264,12 @@ pub(crate) fn get_sigmsg_components<S: Into<TapLeafHash>>(
         debug!("input sequence: {:?}", sequence.to_hex_string(Case::Lower));
         components.push(sequence);
     } else {
-        let mut input_idx = Vec::new();
-        (input_index as u32).consensus_encode(&mut input_idx)?;
-        debug!("input index: {:?}", input_idx.to_hex_string(Case::Lower));
-        components.push(input_idx);
+        if spec.input_index {
+            let mut input_idx = Vec::new();
+            (input_index as u32).consensus_encode(&mut input_idx)?;
+            debug!("input index: {:?}", input_idx.to_hex_string(Case::Lower));
+            components.push(input_idx);
+        }
     }
 
     // If an annex is present (the lowest bit of spend_type is set):

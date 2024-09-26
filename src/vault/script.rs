@@ -26,6 +26,8 @@ pub(crate) fn vault_trigger_withdrawal() -> ScriptBuf {
         // start with encoded leaf hash
         .push_opcode(OP_CAT) // encoded leaf hash
         .push_opcode(OP_CAT) // encoded leaf hash
+        .push_slice([0x00u8, 0x00u8, 0x00u8, 0x00u8]) // add input index of 0
+        .push_opcode(OP_SWAP) // bring working sigmsg back to top of stack
         .push_opcode(OP_CAT) // input index
         .push_opcode(OP_CAT) // spend type
         .push_slice(*DUST_AMOUNT) // push the dust amount for the target output
@@ -155,6 +157,8 @@ pub(crate) fn vault_cancel_withdrawal() -> ScriptBuf {
         // start with encoded leaf hash
         .push_opcode(OP_CAT) // encoded leaf hash
         .push_opcode(OP_CAT) // encoded leaf hash
+        .push_slice([0x00u8, 0x00u8, 0x00u8, 0x00u8]) // add input index of 0
+        .push_opcode(OP_SWAP) // bring working sigmsg back to top of stack
         .push_opcode(OP_CAT) // input index
         .push_opcode(OP_CAT) // spend type
         .push_opcode(OP_FROMALTSTACK) // get the output amount
