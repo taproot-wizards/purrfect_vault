@@ -203,6 +203,7 @@ impl VaultCovenant {
         let tx_commitment_spec = TxCommitmentSpec {
             prev_sciptpubkeys: false,
             prev_amounts: false,
+            input_index: false,
             outputs: false,
             ..Default::default()
         };
@@ -466,6 +467,7 @@ impl VaultCovenant {
         let tx_commitment_spec = TxCommitmentSpec {
             prev_sciptpubkeys: false,
             prev_amounts: false,
+            input_index: false,
             outputs: false,
             ..Default::default()
         };
