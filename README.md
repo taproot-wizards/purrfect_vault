@@ -75,10 +75,6 @@ input amounts add up to the vault output amounts. For that we need either 64-bit
 by doing a mini big-num implementation), or you need to have different tapscripts with pre-defined amounts, or you just only use vaults with 32-bit amounts. 
 I think doing 64-bit add in CAT is the most interesting, but I haven't done it yet.
 
-There are not currently any (normal) signature checks in the vault scripts. There isn't a reason they can't be there. It would actually be very easy:
-commit to a pubkey, push a signature in the witness, checksig. I just didn't do it. The point of the demo was to play with transaction introspection.
-If you want to add signature checking, I'm more than happy to review the PR!
-
 Right now the vault always spends back to itself when you cancel. In real life you might want to have it go to a different script with different keys. 
 That would be an easy change to make, but was elided for simplicity in this demo.
 
